@@ -3,24 +3,88 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar, View, StyleSheet } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 
-import HomeScreen from '../screens/HomeScreen';
+import WelcomeScreen from '../screens/WelcomeScreen';
+import StudentHome from '../screens/student/StudentHome';
 import SendOtp from '../screens/SendOtp';
 import VerifyOtp from '../screens/VerifyOtp';
 import StudentProfileSetup from '../screens/student/StudentProfileSetup';
 import TopperProfileSetup from '../screens/topper/TopperProfileSetup';
 import TopperVerification from '../screens/topper/TopperVerification';
+import TopperApprovalPending from '../screens/topper/TopperApprovalPending';
+import TopperHome from '../screens/topper/TopperHome';
+import TopperDashboard from '../screens/topper/TopperDashboard';
+import TopperProfile from '../screens/topper/TopperProfile';
+import NotePreview from '../screens/topper/NotePreview';
+import UploadNotes from '../screens/topper/UploadNotes';
+import AdminProfileSetup from '../screens/admin/AdminProfileSetup';
+import AdminDashboard from '../screens/admin/AdminDashboard';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { useState, useEffect } from 'react';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { Ionicons } from '@expo/vector-icons';
 
 const Stack = createNativeStackNavigator();
 
 function GradientWrapper({ children }) {
+    return (
+      <LinearGradient
+        colors={["#141E30", "#000000"]} // Blue → Black
+        style={styles.gradient}
+      >
+        {children}
+      </LinearGradient>
+    );
+  }
+
+const Tab = createBottomTabNavigator();
+
+function TopperTabNavigator() {
   return (
-    <LinearGradient
-      colors={["#141E30", "#000000"]} // Blue → Black
-      style={styles.gradient}
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarStyle: {
+          backgroundColor: '#0F172A',
+          borderTopWidth: 1,
+          borderTopColor: '#1E293B',
+          height: 70,
+          paddingBottom: 10,
+        },
+        tabBarActiveTintColor: '#00B1FC',
+        tabBarInactiveTintColor: '#64748B',
+        tabBarIcon: ({ focused, color, size }) => {
+          let iconName;
+          if (route.name === 'TopperHome') iconName = focused ? 'home' : 'home-outline';
+          else if (route.name === 'TopperDashboard') iconName = focused ? 'grid' : 'grid-outline';
+          else if (route.name === 'TopperUploads') iconName = focused ? 'cloud-upload' : 'cloud-upload-outline';
+          else if (route.name === 'TopperProfile') iconName = focused ? 'person' : 'person-outline';
+          return <Ionicons name={iconName} size={24} color={color} />;
+        },
+      })}
     >
-      {children}
-    </LinearGradient>
+      <Tab.Screen name="TopperHome" component={TopperHome} options={{ tabBarLabel: 'Home' }} />
+      <Tab.Screen name="TopperDashboard" component={TopperDashboard} options={{ tabBarLabel: 'Dashboard' }} />
+      <Tab.Screen name="TopperUploads" component={UploadNotes} options={{ tabBarLabel: 'Uploads' }} />
+      <Tab.Screen name="TopperProfile" component={TopperProfile} options={{ tabBarLabel: 'Profile' }} />
+    </Tab.Navigator>
   );
+}
+
+function DashboardWrapper(props) {
+  const [role, setRole] = useState(null);
+
+  useEffect(() => {
+    const getRole = async () => {
+      const user = await AsyncStorage.getItem('user');
+      if (user) {
+        setRole(JSON.parse(user).role);
+      }
+    };
+    getRole();
+  }, []);
+
+  if (role === 'TOPPER') return <TopperTabNavigator />;
+  return <StudentHome {...props} />;
 }
 
 export default function AppNavigator() {
@@ -29,7 +93,7 @@ export default function AppNavigator() {
       <StatusBar barStyle="light-content" />
 
       <Stack.Navigator
-        initialRouteName="Home"
+        initialRouteName="Welcome"
         screenOptions={{
           headerStyle: {
             backgroundColor: "transparent",
@@ -42,15 +106,22 @@ export default function AppNavigator() {
           headerShown: false,
         }}
       >
-        <Stack.Screen
-          name="Home"
-          // options={{ title: "Notes" }}
-        >
+        <Stack.Screen name="Welcome">
           {() => (
             <GradientWrapper>
-              <HomeScreen />
+              <WelcomeScreen />
             </GradientWrapper>
           )}
+        </Stack.Screen>
+
+        <Stack.Screen name="Home">
+          {(props) => <DashboardWrapper {...props} />}
+        </Stack.Screen>
+
+        <Stack.Screen name="NotePreview" component={NotePreview} />
+
+        <Stack.Screen name="UploadNotes">
+          {(props) => <UploadNotes {...props} />}
         </Stack.Screen>
 
         <Stack.Screen name="SendOtp">
@@ -89,6 +160,30 @@ export default function AppNavigator() {
           {(props) => (
             <GradientWrapper>
               <TopperVerification {...props} />
+            </GradientWrapper>
+          )}
+        </Stack.Screen>
+
+        <Stack.Screen name="TopperApprovalPending">
+          {(props) => (
+            <GradientWrapper>
+              <TopperApprovalPending {...props} />
+            </GradientWrapper>
+          )}
+        </Stack.Screen>
+
+        <Stack.Screen name="AdminProfileSetup">
+          {(props) => (
+            <GradientWrapper>
+              <AdminProfileSetup {...props} />
+            </GradientWrapper>
+          )}
+        </Stack.Screen>
+
+        <Stack.Screen name="AdminDashboard">
+          {(props) => (
+            <GradientWrapper>
+              <AdminDashboard {...props} />
             </GradientWrapper>
           )}
         </Stack.Screen>

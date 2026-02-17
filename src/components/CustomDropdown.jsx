@@ -20,7 +20,7 @@ const CustomDropdown = ({ label, options, selectedValue, onSelect, placeholder =
                 onPress={() => setIsVisible(true)}
             >
                 <AppText style={[styles.selectedText, !selectedValue && styles.placeholderText]}>
-                    {selectedValue || placeholder}
+                    {options.find(opt => (opt.value || opt) === selectedValue)?.label || (typeof selectedValue === 'object' ? selectedValue.label : selectedValue) || placeholder}
                 </AppText>
                 <Ionicons name="chevron-down" size={20} color="#ccc" />
             </TouchableOpacity>
@@ -39,26 +39,32 @@ const CustomDropdown = ({ label, options, selectedValue, onSelect, placeholder =
                                 contentContainerStyle={styles.optionsList}
                                 showsVerticalScrollIndicator={false}
                             >
-                                {options.map((option, index) => (
-                                    <TouchableOpacity
-                                        key={index}
-                                        style={[
-                                            styles.optionItem,
-                                            selectedValue === option && styles.selectedOptionItem
-                                        ]}
-                                        onPress={() => handleSelect(option)}
-                                    >
-                                        <AppText style={[
-                                            styles.optionText,
-                                            selectedValue === option && styles.selectedOptionText
-                                        ]}>
-                                            {option}
-                                        </AppText>
-                                        {selectedValue === option && (
-                                            <Ionicons name="checkmark" size={20} color="#4377d8ff" />
-                                        )}
-                                    </TouchableOpacity>
-                                ))}
+                                {options.map((option, index) => {
+                                    const optionValue = option.value || option;
+                                    const optionLabel = option.label || option;
+                                    const isSelected = selectedValue === optionValue;
+
+                                    return (
+                                        <TouchableOpacity
+                                            key={index}
+                                            style={[
+                                                styles.optionItem,
+                                                isSelected && styles.selectedOptionItem
+                                            ]}
+                                            onPress={() => handleSelect(optionValue)}
+                                        >
+                                            <AppText style={[
+                                                styles.optionText,
+                                                isSelected && styles.selectedOptionText
+                                            ]}>
+                                                {optionLabel}
+                                            </AppText>
+                                            {isSelected && (
+                                                <Ionicons name="checkmark" size={20} color="#4377d8ff" />
+                                            )}
+                                        </TouchableOpacity>
+                                    );
+                                })}
                             </ScrollView>
                         </View>
                     </View>

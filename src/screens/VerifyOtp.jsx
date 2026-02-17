@@ -45,19 +45,33 @@ const VerifyOtp = ({ navigation, route }) => {
             await AsyncStorage.setItem('token', result.token);
             await AsyncStorage.setItem('user', JSON.stringify(result.user));
 
-            // Log for debugging
-            console.log("Token saved successfully:", result.token);
+
         }
 
         if (result?.user?.profileCompleted) {
-            navigation.reset({
-                index: 0,
-                routes: [{ name: 'Home' }],
-            });
+            // Check if Topper needs approval
+            if (result?.user?.role === 'TOPPER') {
+                navigation.reset({
+                    index: 0,
+                    routes: [{ name: 'TopperApprovalPending' }],
+                });
+            } else if (result?.user?.role === 'ADMIN') {
+                navigation.reset({
+                    index: 0,
+                    routes: [{ name: 'AdminDashboard' }],
+                });
+            } else {
+                navigation.reset({
+                    index: 0,
+                    routes: [{ name: 'Home' }],
+                });
+            }
         } else {
             // Check role and navigate
             if (result?.user?.role === 'TOPPER') {
                 navigation.navigate('TopperProfileSetup');
+            } else if (result?.user?.role === 'ADMIN') {
+                navigation.navigate('AdminProfileSetup');
             } else {
                 navigation.navigate('StudentProfileSetup');
             }

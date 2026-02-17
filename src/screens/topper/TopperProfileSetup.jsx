@@ -16,6 +16,35 @@ const CLASSES = ['10', '12'];
 const BOARDS = ['CBSE', 'ICSE', 'STATE'];
 const STREAMS = ['SCIENCE', 'COMMERCE', 'ARTS'];
 
+const SUBJECTS_DATA = {
+    '10': [
+        { id: 'Maths', name: 'Maths', icon: 'calculator' },
+        { id: 'Science', name: 'Science', icon: 'flask' },
+        { id: 'English', name: 'English', icon: 'book' },
+        { id: 'SST', name: 'Social Studies', icon: 'earth' },
+        { id: 'Hindi', name: 'Hindi', icon: 'language' },
+    ],
+    'SCIENCE': [
+        { id: 'Physics', name: 'Physics', icon: 'flash' },
+        { id: 'Chemistry', name: 'Chemistry', icon: 'flask' },
+        { id: 'Maths', name: 'Maths', icon: 'calculator' },
+        { id: 'Biology', name: 'Biology', icon: 'leaf' },
+        { id: 'Comp. Sci', name: 'Comp. Sci', icon: 'laptop' },
+    ],
+    'COMMERCE': [
+        { id: 'Accountancy', name: 'Accountancy', icon: 'calculator' },
+        { id: 'Business Studies', name: 'Business Studies', icon: 'briefcase' },
+        { id: 'Economics', name: 'Economics', icon: 'cash' },
+        { id: 'Maths', name: 'Maths', icon: 'calculator' },
+    ],
+    'ARTS': [
+        { id: 'History', name: 'History', icon: 'time' },
+        { id: 'Political Science', name: 'Pol. Science', icon: 'people' },
+        { id: 'Geography', name: 'Geography', icon: 'earth' },
+        { id: 'Economics', name: 'Economics', icon: 'cash' },
+    ]
+};
+
 const TopperProfileSetup = ({ navigation }) => {
     // Form State
     const [firstName, setFirstName] = useState('');
@@ -26,6 +55,8 @@ const TopperProfileSetup = ({ navigation }) => {
     const [expertiseClass, setExpertiseClass] = useState('');
     const [board, setBoard] = useState('');
     const [stream, setStream] = useState(''); // Only if class 12
+    const [selectedSubjects, setSelectedSubjects] = useState([]);
+    const [displayedSubjects, setDisplayedSubjects] = useState([]);
 
     // Achievements
     const [achievements, setAchievements] = useState([]);
@@ -52,6 +83,29 @@ const TopperProfileSetup = ({ navigation }) => {
 
         return () => clearTimeout(timer);
     }, []);
+
+    useEffect(() => {
+        let subjects = [];
+        if (expertiseClass === '10') {
+            subjects = SUBJECTS_DATA['10'];
+        } else if (expertiseClass === '12' && stream) {
+            subjects = SUBJECTS_DATA[stream] || [];
+        }
+        setDisplayedSubjects(subjects);
+        setSelectedSubjects([]); // Reset when class/stream changes
+    }, [expertiseClass, stream]);
+
+    const toggleSubject = (subjectName) => {
+        if (selectedSubjects.includes(subjectName)) {
+            setSelectedSubjects(prev => prev.filter(s => s !== subjectName));
+        } else {
+            if (selectedSubjects.length >= 3) {
+                Alert.alert("Wait", "You can only select up to 3 core subjects.");
+                return;
+            }
+            setSelectedSubjects(prev => [...prev, subjectName]);
+        }
+    };
 
     const pickImage = async () => {
         try {
@@ -92,6 +146,11 @@ const TopperProfileSetup = ({ navigation }) => {
             return;
         }
 
+        if (selectedSubjects.length < 3) {
+            Alert.alert("Error", "Please select exactly 3 main core subjects");
+            return;
+        }
+
         if (achievements.length === 0) {
             Alert.alert("Error", "Please add at least one achievement");
             return;
@@ -105,6 +164,7 @@ const TopperProfileSetup = ({ navigation }) => {
         formData.append("board", board);
         if (expertiseClass === '12') formData.append("stream", stream);
 
+        selectedSubjects.forEach(sub => formData.append("coreSubjects[]", sub));
         achievements.forEach(ach => formData.append("achievements[]", ach));
 
         if (image) {
@@ -136,7 +196,7 @@ const TopperProfileSetup = ({ navigation }) => {
                     <View style={styles.profileSection}>
                         <TouchableOpacity onPress={pickImage} style={styles.avatarContainer}>
                             <Image
-                                source={image ? { uri: image } : require('../../../assets/student.avif')}
+                                source={image ? { uri: image } : require('../../../assets/topper.avif')}
                                 style={styles.avatar} // Placeholder needed if not available
                             />
                             <View style={styles.cameraIcon}>
@@ -151,7 +211,7 @@ const TopperProfileSetup = ({ navigation }) => {
                             <AppText style={styles.label}>First Name</AppText>
                             <TextInput
                                 style={styles.input}
-                                placeholder="Aditya"
+                                placeholder="Enter First Name"
                                 placeholderTextColor="#666"
                                 value={firstName}
                                 onChangeText={setFirstName}
@@ -161,7 +221,7 @@ const TopperProfileSetup = ({ navigation }) => {
                             <AppText style={styles.label}>Last Name</AppText>
                             <TextInput
                                 style={styles.input}
-                                placeholder="Sharma"
+                                placeholder="Enter Last Name"
                                 placeholderTextColor="#666"
                                 value={lastName}
                                 onChangeText={setLastName}
@@ -224,6 +284,34 @@ const TopperProfileSetup = ({ navigation }) => {
                             placeholder="Select Board (e.g. CBSE)"
                         />
                     </View>
+
+                    {/* Core Subjects Selection */}
+                    {displayedSubjects.length > 0 && (
+                        <View style={styles.formGroup}>
+                            <View style={styles.labelRow}>
+                                <Ionicons name="list" size={16} color="#4377d8ff" style={{ marginRight: 5 }} />
+                                <AppText style={styles.label}>Select 3 Core Subjects</AppText>
+                            </View>
+                            <AppText style={styles.subLabel}>Choose subjects you excel in.</AppText>
+                            <View style={styles.subjectsGrid}>
+                                {displayedSubjects.map((sub) => {
+                                    const isSelected = selectedSubjects.includes(sub.id);
+                                    return (
+                                        <TouchableOpacity
+                                            key={sub.id}
+                                            style={[styles.subjectChip, isSelected && styles.subjectChipSelected]}
+                                            onPress={() => toggleSubject(sub.id)}
+                                        >
+                                            <Ionicons name={sub.icon} size={16} color={isSelected ? "white" : "#a0aec0"} />
+                                            <AppText style={[styles.subjectText, isSelected && styles.subjectTextSelected]}>
+                                                {sub.name}
+                                            </AppText>
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </View>
+                        </View>
+                    )}
 
                     {/* Achievements */}
                     <View style={styles.formGroup}>
@@ -409,6 +497,39 @@ const styles = StyleSheet.create({
         marginTop: 10,
         marginBottom: 30,
         backgroundColor: '#4299e1', // Topper blue
+    },
+    subLabel: {
+        fontSize: 12,
+        color: '#a0aec0',
+        marginBottom: 10,
+    },
+    subjectsGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 10,
+    },
+    subjectChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(58, 60, 63, 0.5)',
+        paddingVertical: 10,
+        paddingHorizontal: 15,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+        gap: 8,
+    },
+    subjectChipSelected: {
+        backgroundColor: '#4377d8ff',
+        borderColor: '#4377d8ff',
+    },
+    subjectText: {
+        color: '#a0aec0',
+        fontSize: 14,
+    },
+    subjectTextSelected: {
+        color: 'white',
+        fontWeight: '600',
     },
 });
 

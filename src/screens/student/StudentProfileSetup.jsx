@@ -202,7 +202,7 @@ const StudentProfileSetup = ({ navigation }) => {
                         <AppText style={styles.label}>Full Name</AppText>
                         <TextInput
                             style={styles.input}
-                            placeholder="Rahul Sharma"
+                            placeholder="Enter your Full Name"
                             placeholderTextColor="#666"
                             value={fullName}
                             onChangeText={setFullName}

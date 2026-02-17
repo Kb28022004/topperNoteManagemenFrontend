@@ -1,4 +1,4 @@
-import React from "react";
+import React, { memo } from "react";
 import { TouchableOpacity, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import AppText from "./AppText";
@@ -19,7 +19,7 @@ const ReusableButton = ({ title, onPress, style, textStyle, disabled }) => {
   );
 };
 
-export default ReusableButton;
+export default memo(ReusableButton);
 
 const styles = StyleSheet.create({
   button: {

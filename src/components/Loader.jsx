@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { View, ActivityIndicator, StyleSheet, Modal } from 'react-native';
 import AppText from './AppText';
 
@@ -46,4 +46,4 @@ const styles = StyleSheet.create({
     },
 });
 
-export default Loader;
+export default memo(Loader);

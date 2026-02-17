@@ -1,5 +1,5 @@
 import { View, StyleSheet, Image, Pressable } from 'react-native';
-import React from 'react';
+import React, { memo } from 'react';
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from '@react-navigation/native';
 import AppText from './AppText';
@@ -88,4 +88,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default SelectUserCard;
+export default memo(SelectUserCard);

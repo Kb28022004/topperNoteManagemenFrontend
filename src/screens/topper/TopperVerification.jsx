@@ -8,21 +8,51 @@ import AppText from '../../components/AppText';
 import ReusableButton from '../../components/ReausableButton';
 import { Ionicons } from "@expo/vector-icons";
 import CustomDropdown from '../../components/CustomDropdown';
-import { useSubmitVerificationMutation } from '../../features/api/topperApi';
+import { useSubmitVerificationMutation, useGetProfileQuery } from '../../features/api/topperApi';
 import useApiFeedback from '../../hooks/useApiFeedback';
 import Loader from '../../components/Loader';
+
+const SUBJECTS_MAP = {
+    '12': {
+        'SCIENCE': ['Physics', 'Chemistry', 'Maths'],
+        'COMMERCE': ['Accountancy', 'Business Studies', 'Economics'],
+        'ARTS': ['History', 'Political Science', 'Geography'],
+    },
+    '10': ['Maths', 'Science', 'English', 'Social Studies', 'Hindi']
+};
 
 const TopperVerification = ({ navigation }) => {
     const [marksheet, setMarksheet] = useState(null);
     const [yearOfPassing, setYearOfPassing] = useState('');
     const [isLoading, setIsLoading] = useState(true);
 
+    const { data: profileData, isLoading: isProfileLoading } = useGetProfileQuery();
+
     // Subject Marks State
-    const [subjectMarks, setSubjectMarks] = useState([
-        { subject: 'Physics', marks: '' },
-        { subject: 'Chemistry', marks: '' },
-        { subject: 'Maths', marks: '' },
-    ]);
+    const [subjectMarks, setSubjectMarks] = useState([]);
+
+    useEffect(() => {
+        if (profileData?.data) {
+            const { expertiseClass, stream, coreSubjects } = profileData.data;
+            let initialSubjects = [];
+
+            if (coreSubjects && coreSubjects.length > 0) {
+                initialSubjects = coreSubjects.map(sub => ({ subject: sub, marks: '' }));
+            } else if (expertiseClass === '12' && stream && SUBJECTS_MAP['12'][stream]) {
+                initialSubjects = SUBJECTS_MAP['12'][stream].map(sub => ({ subject: sub, marks: '' }));
+            } else if (expertiseClass === '10') {
+                initialSubjects = SUBJECTS_MAP['10'].map(sub => ({ subject: sub, marks: '' }));
+            } else {
+                // Default if something goes wrong
+                initialSubjects = [
+                    { subject: 'Physics', marks: '' },
+                    { subject: 'Chemistry', marks: '' },
+                    { subject: 'Maths', marks: '' },
+                ];
+            }
+            setSubjectMarks(initialSubjects);
+        }
+    }, [profileData]);
 
     // Generate years (e.g., 2024 down to 2010)
     const currentYear = new Date().getFullYear();
@@ -30,13 +60,13 @@ const TopperVerification = ({ navigation }) => {
 
     // Custom Hook for initial loading
     useEffect(() => {
-        // Simulate initial page loading
-        const timer = setTimeout(() => {
-            setIsLoading(false);
-        }, 1000);
-
-        return () => clearTimeout(timer);
-    }, []);
+        if (!isProfileLoading) {
+            const timer = setTimeout(() => {
+                setIsLoading(false);
+            }, 500);
+            return () => clearTimeout(timer);
+        }
+    }, [isProfileLoading]);
 
     const [submitVerification, { isLoading: isSubmitting, isSuccess, data, isError, error }] = useSubmitVerificationMutation();
 
@@ -47,7 +77,7 @@ const TopperVerification = ({ navigation }) => {
         error,
         () => navigation.reset({
             index: 0,
-            routes: [{ name: 'Home' }],
+            routes: [{ name: 'TopperApprovalPending' }],
         }),
         "Verification submitted successfully!"
     );
@@ -120,17 +150,32 @@ const TopperVerification = ({ navigation }) => {
         }
 
         // Validate subjects
-        const validSubjects = subjectMarks.filter(s => s.subject.trim() && s.marks.trim());
-        if (validSubjects.length === 0) {
-            Alert.alert("Error", "Please add at least one subject with marks");
+        if (subjectMarks.length === 0) {
+            Alert.alert("Error", "Please add at least one subject");
             return;
+        }
+
+        for (const item of subjectMarks) {
+            if (!item.subject.trim()) {
+                Alert.alert("Error", "All subject names must be filled");
+                return;
+            }
+            if (!item.marks.trim()) {
+                Alert.alert("Error", `Please enter marks for ${item.subject}`);
+                return;
+            }
+            const num = Number(item.marks);
+            if (isNaN(num) || num < 0 || num > 100) {
+                Alert.alert("Error", `Marks for ${item.subject} must be between 0 and 100`);
+                return;
+            }
         }
 
         const formData = new FormData();
         formData.append("yearOfPassing", yearOfPassing);
 
-        // Serialize subjectMarks as JSON string for backend to parse
-        formData.append("subjectMarks", JSON.stringify(validSubjects));
+        // Serialize all valid subjectMarks as JSON string
+        formData.append("subjectMarks", JSON.stringify(subjectMarks));
 
         // Append file
         const uri = marksheet.uri;

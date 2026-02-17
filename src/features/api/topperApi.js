@@ -15,6 +15,7 @@ export const topperApi = createApi({
       return headers;
     },
   }),
+  tagTypes: ['TopperProfile'],
   
   endpoints: (builder) => ({
 
@@ -25,21 +26,33 @@ export const topperApi = createApi({
         method: "POST",
         body: formData,
       }),
+      invalidatesTags: ['TopperProfile'],
     }),
 
     // Step 2: Submit Verification
     submitVerification: builder.mutation({
-        query: (formData) => ({
-          url: "/verify",
-          method: "POST",
-          body: formData,
-        }),
+      query: (formData) => ({
+        url: "/verify",
+        method: "POST",
+        body: formData,
       }),
+      invalidatesTags: ['TopperProfile'],
+    }),
+
+    // Get My Profile
+    getProfile: builder.query({
+      query: () => ({
+        url: "/me",
+        method: "GET",
+      }),
+      providesTags: ['TopperProfile'],
+    }),
 
   }),
 });
 
 export const {
   useSaveBasicProfileMutation,
-  useSubmitVerificationMutation
+  useSubmitVerificationMutation,
+  useGetProfileQuery
 } = topperApi;

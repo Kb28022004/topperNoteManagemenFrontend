@@ -1,16 +1,12 @@
-import React from "react";
+import React, { memo } from "react";
 import { Text } from "react-native";
 
-export default function AppText({
+function AppText({
   children,
   style,
   weight = "regular",
   ...props
 }) {
-  // let fontFamily = "Poppins_Regular";
-  // if (weight === "bold") fontFamily = "Poppins_Bold";
-  // if (weight === "semibold") fontFamily = "Poppins_SemiBold";
-
   const fontWeight = weight === "bold" ? "bold" : weight === "semibold" ? "600" : "400";
 
   return (
@@ -22,3 +18,5 @@ export default function AppText({
     </Text>
   );
 }
+
+export default memo(AppText);

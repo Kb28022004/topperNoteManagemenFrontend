@@ -1,24 +1,55 @@
 import { View, Text, StyleSheet, Image } from "react-native";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import ReusableButton from "../components/ReausableButton";
 import SelectUserCard from "../components/SelectUserCard";
 import AppText from "../components/AppText";
 import Loader from "../components/Loader";
+import { useNavigation } from "@react-navigation/native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export default function HomeScreen() {
+export default function WelcomeScreen() {
+  const navigation = useNavigation();
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Simulate initial loading
-    const timer = setTimeout(() => {
+    const checkAuth = async () => {
+      const token = await AsyncStorage.getItem("token");
+      const userStr = await AsyncStorage.getItem("user");
+      if (token && userStr) {
+        const user = JSON.parse(userStr);
+        if (user.role === "STUDENT") {
+          navigation.replace("Home");
+          return;
+        } else if (user.role === "ADMIN") {
+          navigation.replace("AdminDashboard");
+          return;
+        } else if (user.role === "TOPPER") {
+          // If topper is verified, they go home, else pending
+          if (user.isTopperVerified) {
+            navigation.replace("Home"); // Note: Topper might need their own home eventually
+          } else {
+            navigation.replace("TopperApprovalPending");
+          }
+          return;
+        }
+      }
       setIsLoading(false);
-    }, 1000); // Adjust duration as needed
+    };
+    checkAuth();
+  }, [navigation]);
 
-    return () => clearTimeout(timer);
+  const handleGetStarted = useCallback(() => {
+    console.log("Pressed Get Started");
   }, []);
 
-  return (
+  const handleLogin = useCallback(() => {
+    console.log("Pressed Login");
+  }, []);
 
+  const studentParams = useMemo(() => ({ role: 'STUDENT' }), []);
+  const topperParams = useMemo(() => ({ role: 'TOPPER' }), []);
+
+  return (
     <View style={styles.container}>
       <Loader visible={isLoading} />
       {/* top section */}
@@ -48,7 +79,7 @@ export default function HomeScreen() {
           title="I'm a Student"
           description="Find verified notes & ace your exams"
           routeName="SendOtp"
-          params={{ role: 'STUDENT' }}
+          params={studentParams}
         />
 
         <SelectUserCard
@@ -56,7 +87,7 @@ export default function HomeScreen() {
           title="I'm a Topper"
           description="Uploads your notes & earn"
           routeName="SendOtp"
-          params={{ role: 'TOPPER' }}
+          params={topperParams}
         />
       </View>
 
@@ -64,12 +95,11 @@ export default function HomeScreen() {
       <View style={styles.bottom}>
         <ReusableButton
           title="Get Started"
-          onPress={() => console.log("Pressed")}
-
+          onPress={handleGetStarted}
         />
         <AppText
           style={styles.bottomText}
-          onPress={() => console.log("Pressed")}>
+          onPress={handleLogin}>
           Already have an account ? &nbsp;
           <AppText
             style={styles.bottomTextLogin}>
@@ -102,14 +132,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 25,
 
   },
 
   topSecondSection: {
     alignItems: "center",
     justifyContent: "center",
-
+    marginTop: 40
   },
 
   logo: {
@@ -153,7 +182,6 @@ const styles = StyleSheet.create({
     width: "100%",
     alignItems: "center",
     justifyContent: "center",
-
   },
 
   bottomText: {
