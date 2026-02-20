@@ -17,11 +17,13 @@ import AppText from '../../components/AppText';
 import { useGetProfileQuery } from '../../features/api/topperApi';
 import { useGetMyNotesQuery } from '../../features/api/noteApi';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Alert } from 'react-native';
+import { useAlert } from '../../context/AlertContext';
+import NoDataFound from '../../components/NoDataFound';
 
 const { width } = Dimensions.get('window');
 
 const TopperHome = ({ navigation }) => {
+    const { showAlert } = useAlert();
     const { data: profile, refetch: refetchProfile } = useGetProfileQuery();
     const { data: notesData, isLoading, refetch: refetchNotes } = useGetMyNotesQuery();
     const [refreshing, setRefreshing] = useState(false);
@@ -48,23 +50,21 @@ const TopperHome = ({ navigation }) => {
     }, [refetchProfile, refetchNotes]);
 
     const handleLogout = () => {
-        Alert.alert(
+        showAlert(
             "Logout",
             "Are you sure you want to logout?",
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Logout",
-                    style: "destructive",
-                    onPress: async () => {
-                        await AsyncStorage.clear();
-                        navigation.reset({
-                            index: 0,
-                            routes: [{ name: 'Welcome' }],
-                        });
-                    }
+            "warning",
+            {
+                showCancel: true,
+                confirmText: "Logout",
+                onConfirm: async () => {
+                    await AsyncStorage.clear();
+                    navigation.reset({
+                        index: 0,
+                        routes: [{ name: 'Welcome' }],
+                    });
                 }
-            ]
+            }
         );
     };
 
@@ -212,10 +212,11 @@ const TopperHome = ({ navigation }) => {
                         keyExtractor={item => item._id}
                         scrollEnabled={false}
                         ListEmptyComponent={
-                            <View style={styles.emptyState}>
-                                <MaterialCommunityIcons name="file-document-outline" size={50} color="#334155" />
-                                <AppText style={styles.emptyText}>No notes uploaded yet</AppText>
-                            </View>
+                            <NoDataFound
+                                message="No notes uploaded yet. Start sharing your knowledge!"
+                                icon="document-text-outline"
+                                containerStyle={{ paddingVertical: 30 }}
+                            />
                         }
                     />
                 )}

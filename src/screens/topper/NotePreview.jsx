@@ -5,8 +5,7 @@ import {
     TouchableOpacity,
     Image,
     Dimensions,
-    StatusBar,
-    Alert
+    StatusBar
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
@@ -18,10 +17,12 @@ import { useGetNoteDetailsQuery } from '../../features/api/noteApi';
 import Loader from '../../components/Loader';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useAlert } from '../../context/AlertContext';
 
 const { width, height } = Dimensions.get('window');
 
 const NotePreview = ({ route, navigation }) => {
+    const { showAlert } = useAlert();
     const { noteId } = route.params;
     const { data: note, isLoading, refetch } = useGetNoteDetailsQuery(noteId);
     const [currentPageIndex, setCurrentPageIndex] = useState(0);
@@ -67,7 +68,9 @@ const NotePreview = ({ route, navigation }) => {
 
     const handleBuyNow = () => {
         // Navigation to payment or checkout
-        Alert.alert("Unlock Full Access", `Purchase this note for ₹${note?.price?.current} to view all ${totalPages} pages and download the PDF.`);
+        showAlert("Unlock Full Access", `Purchase this note for ₹${note?.price?.current} to view all ${totalPages} pages and download the PDF.`, "info", {
+            confirmText: "Okay"
+        });
     };
 
     return (

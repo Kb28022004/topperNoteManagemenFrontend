@@ -3,8 +3,10 @@ import { View, StyleSheet, TouchableOpacity, ScrollView, Modal, TouchableWithout
 import AppText from './AppText';
 import { Ionicons } from "@expo/vector-icons";
 
-const CustomDropdown = ({ label, options, selectedValue, onSelect, placeholder = "Select" }) => {
+const CustomDropdown = ({ label, options, selectedValue, onSelect, placeholder = "Select", error }) => {
     const [isVisible, setIsVisible] = useState(false);
+
+    console.log("options", options)
 
     const handleSelect = (item) => {
         onSelect(item);
@@ -16,7 +18,7 @@ const CustomDropdown = ({ label, options, selectedValue, onSelect, placeholder =
             {label && <AppText style={styles.label}>{label}</AppText>}
 
             <TouchableOpacity
-                style={styles.dropdownButton}
+                style={[styles.dropdownButton, error && styles.buttonError]}
                 onPress={() => setIsVisible(true)}
             >
                 <AppText style={[styles.selectedText, !selectedValue && styles.placeholderText]}>
@@ -153,6 +155,10 @@ const styles = StyleSheet.create({
     selectedOptionText: {
         color: '#4377d8ff',
         fontWeight: 'bold',
+    },
+    buttonError: {
+        borderColor: '#EF4444',
+        backgroundColor: 'rgba(239, 68, 68, 0.05)',
     },
 });
 

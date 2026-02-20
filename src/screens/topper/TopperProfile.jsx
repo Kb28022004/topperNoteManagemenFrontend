@@ -11,9 +11,10 @@ import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import AppText from '../../components/AppText';
 import { useGetProfileQuery } from '../../features/api/topperApi';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Alert } from 'react-native';
+import { useAlert } from '../../context/AlertContext';
 
 const TopperProfile = ({ navigation }) => {
+    const { showAlert } = useAlert();
     const { data: profile, refetch: refetchProfile } = useGetProfileQuery();
     const [refreshing, setRefreshing] = React.useState(false);
 
@@ -30,23 +31,21 @@ const TopperProfile = ({ navigation }) => {
     const userData = profile?.data;
 
     const handleLogout = () => {
-        Alert.alert(
+        showAlert(
             "Logout",
             "Are you sure you want to logout?",
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Logout",
-                    style: "destructive",
-                    onPress: async () => {
-                        await AsyncStorage.clear();
-                        navigation.reset({
-                            index: 0,
-                            routes: [{ name: 'Welcome' }],
-                        });
-                    }
+            "warning",
+            {
+                showCancel: true,
+                confirmText: "Logout",
+                onConfirm: async () => {
+                    await AsyncStorage.clear();
+                    navigation.reset({
+                        index: 0,
+                        routes: [{ name: 'Welcome' }],
+                    });
                 }
-            ]
+            }
         );
     };
 

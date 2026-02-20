@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import Header from '../../components/Header';
 import Stepper from '../../components/Stepper'; // Assume reusable or step 1
@@ -10,6 +10,7 @@ import CustomDropdown from '../../components/CustomDropdown';
 import { useSaveBasicProfileMutation } from '../../features/api/topperApi';
 import useApiFeedback from '../../hooks/useApiFeedback';
 import Loader from '../../components/Loader';
+import { useAlert } from '../../context/AlertContext';
 
 // Constants
 const CLASSES = ['10', '12'];
@@ -47,6 +48,7 @@ const SUBJECTS_DATA = {
 
 const TopperProfileSetup = ({ navigation }) => {
     // Form State
+    const { showAlert } = useAlert();
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
     const [shortBio, setShortBio] = useState('');
@@ -100,7 +102,7 @@ const TopperProfileSetup = ({ navigation }) => {
             setSelectedSubjects(prev => prev.filter(s => s !== subjectName));
         } else {
             if (selectedSubjects.length >= 3) {
-                Alert.alert("Wait", "You can only select up to 3 core subjects.");
+                showAlert("Wait", "You can only select up to 3 core subjects.", "warning");
                 return;
             }
             setSelectedSubjects(prev => [...prev, subjectName]);
@@ -120,7 +122,7 @@ const TopperProfileSetup = ({ navigation }) => {
                 setImage(result.assets[0].uri);
             }
         } catch (error) {
-            Alert.alert("Error", "Failed to open gallery.");
+            showAlert("Error", "Failed to open gallery.", "error");
         }
     };
 
@@ -137,22 +139,22 @@ const TopperProfileSetup = ({ navigation }) => {
 
     const handleSave = async () => {
         if (!firstName.trim() || !lastName.trim() || !expertiseClass || !board) {
-            Alert.alert("Error", "Please fill all required fields");
+            showAlert("Error", "Please fill all required fields", "error");
             return;
         }
 
         if (expertiseClass === '12' && !stream) {
-            Alert.alert("Error", "Please select a stream for Class 12");
+            showAlert("Error", "Please select a stream for Class 12", "error");
             return;
         }
 
         if (selectedSubjects.length < 3) {
-            Alert.alert("Error", "Please select exactly 3 main core subjects");
+            showAlert("Error", "Please select exactly 3 main core subjects", "error");
             return;
         }
 
         if (achievements.length === 0) {
-            Alert.alert("Error", "Please add at least one achievement");
+            showAlert("Error", "Please add at least one achievement", "error");
             return;
         }
 

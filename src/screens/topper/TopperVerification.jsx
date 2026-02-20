@@ -11,6 +11,7 @@ import CustomDropdown from '../../components/CustomDropdown';
 import { useSubmitVerificationMutation, useGetProfileQuery } from '../../features/api/topperApi';
 import useApiFeedback from '../../hooks/useApiFeedback';
 import Loader from '../../components/Loader';
+import { useAlert } from '../../context/AlertContext';
 
 const SUBJECTS_MAP = {
     '12': {
@@ -22,6 +23,7 @@ const SUBJECTS_MAP = {
 };
 
 const TopperVerification = ({ navigation }) => {
+    const { showAlert } = useAlert();
     const [marksheet, setMarksheet] = useState(null);
     const [yearOfPassing, setYearOfPassing] = useState('');
     const [isLoading, setIsLoading] = useState(true);
@@ -99,7 +101,7 @@ const TopperVerification = ({ navigation }) => {
                                 setMarksheet(result.assets[0]);
                             }
                         } catch (e) {
-                            Alert.alert("Error", "Failed to pick image");
+                            showAlert("Error", "Failed to pick image", "error");
                         }
                     }
                 },
@@ -115,7 +117,7 @@ const TopperVerification = ({ navigation }) => {
                                 setMarksheet(result.assets[0]);
                             }
                         } catch (e) {
-                            Alert.alert("Error", "Failed to pick document");
+                            showAlert("Error", "Failed to pick document", "error");
                         }
                     }
                 },
@@ -141,32 +143,32 @@ const TopperVerification = ({ navigation }) => {
 
     const handleSubmit = async () => {
         if (!marksheet) {
-            Alert.alert("Error", "Please upload your marksheet");
+            showAlert("Error", "Please upload your marksheet", "error");
             return;
         }
         if (!yearOfPassing) {
-            Alert.alert("Error", "Please select passing year");
+            showAlert("Error", "Please select passing year", "error");
             return;
         }
 
         // Validate subjects
         if (subjectMarks.length === 0) {
-            Alert.alert("Error", "Please add at least one subject");
+            showAlert("Error", "Please add at least one subject", "error");
             return;
         }
 
         for (const item of subjectMarks) {
             if (!item.subject.trim()) {
-                Alert.alert("Error", "All subject names must be filled");
+                showAlert("Error", "All subject names must be filled", "error");
                 return;
             }
             if (!item.marks.trim()) {
-                Alert.alert("Error", `Please enter marks for ${item.subject}`);
+                showAlert("Error", `Please enter marks for ${item.subject}`, "error");
                 return;
             }
             const num = Number(item.marks);
             if (isNaN(num) || num < 0 || num > 100) {
-                Alert.alert("Error", `Marks for ${item.subject} must be between 0 and 100`);
+                showAlert("Error", `Marks for ${item.subject} must be between 0 and 100`, "error");
                 return;
             }
         }

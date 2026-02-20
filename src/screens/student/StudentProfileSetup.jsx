@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import Header from '../../components/Header';
 import Stepper from '../../components/Stepper';
@@ -10,6 +10,7 @@ import CustomDropdown from '../../components/CustomDropdown';
 import { useCreateProfileMutation } from '../../features/api/studentApi';
 import useApiFeedback from '../../hooks/useApiFeedback';
 import Loader from '../../components/Loader';
+import { useAlert } from '../../context/AlertContext';
 
 // Mock Data
 const CLASSES = ['6', '7', '8', '9', '10', '11', '12'];
@@ -55,6 +56,7 @@ const SUBJECTS_DATA = {
 
 const StudentProfileSetup = ({ navigation }) => {
     // ... (State hooks remain same)
+    const { showAlert } = useAlert();
     const [fullName, setFullName] = useState('');
     const [selectedClass, setSelectedClass] = useState('11');
     const [selectedBoard, setSelectedBoard] = useState('CBSE');
@@ -130,7 +132,7 @@ const StudentProfileSetup = ({ navigation }) => {
             }
         } catch (error) {
             console.error("Error picking image:", error);
-            Alert.alert("Error", "Failed to open gallery. Please try again.");
+            showAlert("Error", "Failed to open gallery. Please try again.", "error");
         }
     };
 
@@ -144,7 +146,7 @@ const StudentProfileSetup = ({ navigation }) => {
 
     const handleSave = async () => {
         if (!fullName.trim()) {
-            Alert.alert("Error", "Please enter your full name");
+            showAlert("Error", "Please enter your full name", "error");
             return;
         }
 

@@ -3,7 +3,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Use 10.0.2.2 for Android Emulator, localhost for iOS Simulator
 // Use 10.0.2.2 for Android Emulator to access host machine
-const STUDENT_API = `http://192.168.21.32:8000/api/v1/students`;
+import { API_BASE_URL } from "../../config";
+
+// Use 10.0.2.2 for Android Emulator, localhost for iOS Simulator
+// Use 10.0.2.2 for Android Emulator to access host machine
+const STUDENT_API = `${API_BASE_URL}/students`;
 
 export const studentApi = createApi({
   reducerPath: "studentApi",

@@ -1,21 +1,29 @@
-import React, { useEffect } from 'react';
-import { ToastAndroid, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { useAlert } from '../context/AlertContext';
 
 const useApiFeedback = (isSuccess, data, isError, error, onSuccess, successMessage) => {
+    const { showAlert } = useAlert();
+    const onSuccessRef = useRef(onSuccess);
+
+    // Update ref when callback changes
+    useEffect(() => {
+        onSuccessRef.current = onSuccess;
+    }, [onSuccess]);
+
     useEffect(() => {
         if (isSuccess && data) {
             const message = successMessage || data?.message || "Success";
-            ToastAndroid.show(message, ToastAndroid.SHORT);
-            if (onSuccess) {
-                onSuccess(data);
+            showAlert("Success", message, "success");
+            if (onSuccessRef.current) {
+                onSuccessRef.current(data);
             }
         }
-    }, [isSuccess, data, onSuccess]);
+    }, [isSuccess, data]); // Removed onSuccess from dependencies
 
     useEffect(() => {
         if (isError) {
             const message = error?.data?.message || error?.error || "Something went wrong";
-            ToastAndroid.show(message, ToastAndroid.SHORT);
+            showAlert("Error", message, "error");
         }
     }, [isError, error]);
 };

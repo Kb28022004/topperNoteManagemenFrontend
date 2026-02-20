@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import Header from '../../components/Header';
 import AppText from '../../components/AppText';
@@ -8,9 +8,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { useCreateProfileMutation } from '../../features/api/adminApi';
 import useApiFeedback from '../../hooks/useApiFeedback';
 import Loader from '../../components/Loader';
+import { useAlert } from '../../context/AlertContext';
 
 const AdminProfileSetup = ({ navigation }) => {
     // Form State
+    const { showAlert } = useAlert();
     const [fullName, setFullName] = useState('');
     const [bio, setBio] = useState('');
     const [department, setDepartment] = useState('');
@@ -53,13 +55,13 @@ const AdminProfileSetup = ({ navigation }) => {
                 setImage(result.assets[0].uri);
             }
         } catch (error) {
-            Alert.alert("Error", "Failed to open gallery.");
+            showAlert("Error", "Failed to open gallery.", "error");
         }
     };
 
     const handleSave = async () => {
         if (!fullName.trim()) {
-            Alert.alert("Error", "Full Name is required");
+            showAlert("Error", "Full Name is required", "error");
             return;
         }
 

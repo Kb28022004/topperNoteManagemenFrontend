@@ -18,6 +18,9 @@ import NotePreview from '../screens/topper/NotePreview';
 import UploadNotes from '../screens/topper/UploadNotes';
 import AdminProfileSetup from '../screens/admin/AdminProfileSetup';
 import AdminDashboard from '../screens/admin/AdminDashboard';
+import Store from '../screens/student/Store';
+import MyLibrary from '../screens/student/MyLibrary';
+import Profile from '../screens/student/Profile';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useState, useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -70,6 +73,38 @@ function TopperTabNavigator() {
   );
 }
 
+function StudentTabNavigator() {
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarStyle: {
+          backgroundColor: '#0F172A',
+          borderTopWidth: 1,
+          borderTopColor: '#1E293B',
+          height: 70,
+          paddingBottom: 10,
+        },
+        tabBarActiveTintColor: '#00B1FC',
+        tabBarInactiveTintColor: '#64748B',
+        tabBarIcon: ({ focused, color, size }) => {
+          let iconName;
+          if (route.name === 'StudentHome') iconName = focused ? 'home' : 'home-outline';
+          else if (route.name === 'MyLibrary') iconName = focused ? 'library' : 'library-outline';
+          else if (route.name === 'Store') iconName = focused ? 'storefront' : 'storefront-outline';
+          else if (route.name === 'Profile') iconName = focused ? 'person' : 'person-outline';
+          return <Ionicons name={iconName} size={24} color={color} />;
+        },
+      })}
+    >
+      <Tab.Screen name="StudentHome" component={StudentHome} options={{ tabBarLabel: 'Home' }} />
+      <Tab.Screen name="MyLibrary" component={MyLibrary} options={{ tabBarLabel: 'My Library' }} /> 
+      <Tab.Screen name="Store" component={Store} options={{ tabBarLabel: 'Store' }} />
+      <Tab.Screen name="Profile" component={Profile} options={{ tabBarLabel: 'Profile' }} />
+    </Tab.Navigator>
+  );
+}
+
 function DashboardWrapper(props) {
   const [role, setRole] = useState(null);
 
@@ -84,7 +119,7 @@ function DashboardWrapper(props) {
   }, []);
 
   if (role === 'TOPPER') return <TopperTabNavigator />;
-  return <StudentHome {...props} />;
+  return <StudentTabNavigator />;
 }
 
 export default function AppNavigator() {
@@ -119,6 +154,7 @@ export default function AppNavigator() {
         </Stack.Screen>
 
         <Stack.Screen name="NotePreview" component={NotePreview} />
+        <Stack.Screen name="StudentNoteDetails" component={require('../screens/student/StudentNoteDetails').default} />
 
         <Stack.Screen name="UploadNotes">
           {(props) => <UploadNotes {...props} />}
@@ -171,6 +207,8 @@ export default function AppNavigator() {
             </GradientWrapper>
           )}
         </Stack.Screen>
+
+        <Stack.Screen name="PublicTopperProfile" component={require('../screens/topper/PublicTopperProfile').default} />
 
         <Stack.Screen name="AdminProfileSetup">
           {(props) => (

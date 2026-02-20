@@ -5,29 +5,25 @@ import {
     TouchableOpacity,
     ScrollView,
     TextInput,
-    Alert,
     KeyboardAvoidingView,
     Platform
 } from 'react-native';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import { PDFDocument } from 'pdf-lib';
 import AppText from '../../components/AppText';
 import ReusableButton from '../../components/ReausableButton';
 import CustomDropdown from '../../components/CustomDropdown';
 import Header from '../../components/Header';
 import Loader from '../../components/Loader';
 import { useUploadNoteMutation } from '../../features/api/noteApi';
+import { useGetProfileQuery } from '../../features/api/topperApi';
 import useApiFeedback from '../../hooks/useApiFeedback';
-
-const CLASSES = ['10', '12'];
-const BOARDS = [
-    { label: 'CBSE', value: 'CBSE' },
-    { label: 'ICSE', value: 'ICSE' },
-    { label: 'State Board', value: 'STATE' }
-];
-const SUBJECTS = ['Physics', 'Chemistry', 'Maths', 'Biology', 'Accountancy', 'Economics', 'History', 'Geography'];
+import { useAlert } from '../../context/AlertContext';
 
 const UploadNotes = ({ navigation }) => {
+    const { showAlert } = useAlert();
     const [currentStep, setCurrentStep] = useState(1);
     const [file, setFile] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -36,9 +32,25 @@ const UploadNotes = ({ navigation }) => {
         class: '',
         chapterName: '',
         board: '',
-        price: ''
+        price: '',
+        description: '',
+        tableOfContents: [{ title: '', pageNumber: '' }]
     });
+    const [validationErrors, setValidationErrors] = useState([]);
+    const { data: profile } = useGetProfileQuery();
     const [uploadNote, { isLoading: uploadLoading, isError, error, isSuccess, data }] = useUploadNoteMutation();
+
+
+    // Auto-fill class and board from profile
+    useEffect(() => {
+        if (profile?.data) {
+            setDetails(prev => ({
+                ...prev,
+                class: profile.data.expertiseClass || '',
+                board: profile.data.board || ''
+            }));
+        }
+    }, [profile]);
 
     useEffect(() => {
         // Simulate initial page loading
@@ -66,27 +78,89 @@ const UploadNotes = ({ navigation }) => {
             });
 
             if (!result.canceled) {
-                setFile(result.assets[0]);
-                setCurrentStep(2);
+                const selectedFile = result.assets[0];
+
+                // 🛡️ Validate Page Count
+                setIsLoading(true);
+                try {
+                    if (!FileSystem || !FileSystem.readAsStringAsync) {
+                        throw new Error("FileSystem module not available. Please restart the app.");
+                    }
+
+                    const fileBase64 = await FileSystem.readAsStringAsync(selectedFile.uri, {
+                        encoding: 'base64',
+                    });
+
+                    const pdfDoc = await PDFDocument.load(fileBase64);
+                    const pageCount = pdfDoc.getPageCount();
+
+                    if (pageCount < 5) {
+                        showAlert('Invalid PDF', `This document has only ${pageCount} pages. A minimum of 5 pages is required.`, 'error');
+                        setIsLoading(false);
+                        return;
+                    }
+
+                    setFile({ ...selectedFile, pageCount });
+                    setCurrentStep(2);
+                } catch (err) {
+                    console.log("PDF Validation Error:", err);
+                    showAlert('Error', 'Could not read PDF page count. Please ensure it is a valid PDF.', 'error');
+                } finally {
+                    setIsLoading(false);
+                }
             }
         } catch (err) {
-            Alert.alert('Error', 'Failed to pick document');
+            showAlert('Error', 'Failed to pick document', 'error');
+        }
+    };
+
+    const addTocItem = () => {
+        setDetails(prev => ({
+            ...prev,
+            tableOfContents: [...prev.tableOfContents, { title: '', pageNumber: '' }]
+        }));
+    };
+
+    const updateTocItem = (index, field, value) => {
+        const newToc = [...details.tableOfContents];
+        newToc[index][field] = value;
+        setDetails(prev => ({ ...prev, tableOfContents: newToc }));
+    };
+
+    const removeTocItem = (index) => {
+        if (details.tableOfContents.length > 1) {
+            setDetails(prev => ({
+                ...prev,
+                tableOfContents: prev.tableOfContents.filter((_, i) => i !== index)
+            }));
         }
     };
 
     const handleContinue = () => {
         if (currentStep === 2) {
-            if (!details.subject || !details.class || !details.chapterName || !details.board) {
-                Alert.alert('Error', 'Please fill all details');
+            const errors = [];
+            if (!details.subject) errors.push('subject');
+            if (!details.chapterName) errors.push('chapterName');
+            if (!details.description) errors.push('description');
+
+            // Check if at least the first TOC title is filled
+            if (!details.tableOfContents[0]?.title) errors.push('toc_title_0');
+
+            if (errors.length > 0) {
+                setValidationErrors(errors);
+                showAlert('Missing Details', 'Please fill all highlighted fields before proceeding.', 'error');
                 return;
             }
+
+            setValidationErrors([]);
             setCurrentStep(3);
         }
     };
 
     const handleSubmit = async () => {
         if (!details.price) {
-            Alert.alert('Error', 'Please set a price');
+            setValidationErrors(['price']);
+            showAlert('Price Required', 'Please set a price for your notes.', 'error');
             return;
         }
 
@@ -96,8 +170,16 @@ const UploadNotes = ({ navigation }) => {
         formData.append('chapterName', details.chapterName);
         formData.append('board', details.board);
         formData.append('price', details.price);
+        formData.append('description', details.description);
+
+        const validToc = details.tableOfContents.filter(item => item.title.trim());
+        formData.append('tableOfContents', JSON.stringify(validToc));
 
         if (file) {
+            if (!file.name.toLowerCase().endsWith('.pdf')) {
+                showAlert('Error', 'Only PDF files are allowed', 'error');
+                return;
+            }
             formData.append('pdf', {
                 uri: file.uri,
                 name: file.name,
@@ -122,7 +204,7 @@ const UploadNotes = ({ navigation }) => {
                     <MaterialCommunityIcons name="file-pdf-box" size={40} color="#00B1FC" />
                 </View>
                 <AppText style={styles.uploadText} weight="bold">Tap to choose PDF</AppText>
-                <AppText style={styles.uploadSubtext}>Max 20MB • PDF format only</AppText>
+                <AppText style={styles.uploadSubtext}>Min 5 Pages • Max 20MB • PDF format only</AppText>
             </TouchableOpacity>
         </View>
     );
@@ -142,7 +224,9 @@ const UploadNotes = ({ navigation }) => {
                 </View>
                 <View style={styles.fileInfo}>
                     <AppText style={styles.fileName} numberOfLines={1}>{file?.name}</AppText>
-                    <AppText style={styles.fileSize}>{(file?.size / (1024 * 1024)).toFixed(1)} MB • PDF</AppText>
+                    <AppText style={styles.fileSize}>
+                        {(file?.size / (1024 * 1024)).toFixed(1)} MB • {file?.pageCount} Pages • PDF
+                    </AppText>
                 </View>
                 <Ionicons name="checkmark-circle" size={20} color="#10B981" />
             </View>
@@ -153,45 +237,113 @@ const UploadNotes = ({ navigation }) => {
                 <View style={styles.halfWidth}>
                     <AppText style={styles.label}>Subject</AppText>
                     <CustomDropdown
-                        options={SUBJECTS}
+                        options={profile?.data?.coreSubjects || []}
                         selectedValue={details.subject}
-                        onSelect={(val) => setDetails({ ...details, subject: val })}
+                        onSelect={(val) => {
+                            setDetails({ ...details, subject: val });
+                            setValidationErrors(prev => prev.filter(e => e !== 'subject'));
+                        }}
                         placeholder="Select"
+                        error={validationErrors.includes('subject')}
                     />
                 </View>
                 <View style={styles.halfWidth}>
                     <AppText style={styles.label}>Class</AppText>
-                    <CustomDropdown
-                        options={CLASSES}
-                        selectedValue={details.class}
-                        onSelect={(val) => setDetails({ ...details, class: val })}
-                        placeholder="Select"
-                    />
+                    <View style={styles.readOnlyInput}>
+                        <AppText style={styles.readOnlyText}>Class {profile?.data?.expertiseClass || 'N/A'}</AppText>
+                    </View>
                 </View>
             </View>
 
             <View style={styles.formGroup}>
-                <AppText style={styles.label}>Chapter Name</AppText>
+                <AppText style={styles.label}>Title</AppText>
                 <TextInput
-                    style={styles.input}
+                    style={[styles.input, validationErrors.includes('chapterName') && styles.inputError]}
                     placeholder="e.g. Electrostatics & Fields"
                     placeholderTextColor="#64748B"
                     value={details.chapterName}
-                    onChangeText={(val) => setDetails({ ...details, chapterName: val })}
+                    onChangeText={(val) => {
+                        setDetails({ ...details, chapterName: val });
+                        setValidationErrors(prev => prev.filter(e => e !== 'chapterName'));
+                    }}
                 />
             </View>
 
             <View style={styles.formGroup}>
                 <AppText style={styles.label}>Board</AppText>
-                <CustomDropdown
-                    options={BOARDS}
-                    selectedValue={details.board}
-                    onSelect={(val) => setDetails({ ...details, board: val })}
-                    placeholder="Select Board"
+                <View style={styles.readOnlyInput}>
+                    <AppText style={styles.readOnlyText}>{profile?.data?.board || 'Select Board'}</AppText>
+                </View>
+            </View>
+
+            <View style={styles.formGroup}>
+                <AppText style={styles.label}>Description</AppText>
+                <TextInput
+                    style={[styles.input, styles.textArea, validationErrors.includes('description') && styles.inputError]}
+                    placeholder="Describe what's special about these notes..."
+                    placeholderTextColor="#64748B"
+                    multiline
+                    numberOfLines={4}
+                    value={details.description}
+                    onChangeText={(val) => {
+                        setDetails({ ...details, description: val });
+                        setValidationErrors(prev => prev.filter(e => e !== 'description'));
+                    }}
+                    textAlignVertical="top"
                 />
             </View>
 
-            <ReusableButton title="Next" onPress={handleContinue} style={{ marginTop: 20 }} />
+            <View style={styles.formGroup}>
+                <View style={styles.rowBetweenNoMargin}>
+                    <AppText style={styles.label}>Table of Contents</AppText>
+                    <TouchableOpacity onPress={addTocItem}>
+                        <AppText style={styles.addBtnText}>+ Add Item</AppText>
+                    </TouchableOpacity>
+                </View>
+
+                {details.tableOfContents.map((item, index) => (
+                    <View key={index} style={styles.tocRow}>
+                        <TextInput
+                            style={[
+                                styles.input,
+                                styles.tocTitleInput,
+                                validationErrors.includes(`toc_title_${index}`) && styles.inputError
+                            ]}
+                            placeholder="Key Points"
+                            placeholderTextColor="#64748B"
+                            value={item.title}
+                            onChangeText={(val) => {
+                                updateTocItem(index, 'title', val);
+                                if (val.trim()) {
+                                    setValidationErrors(prev => prev.filter(e => e !== `toc_title_${index}`));
+                                }
+                            }}
+                        />
+                        <TextInput
+                            style={[styles.input, styles.tocPageInput]}
+                            placeholder="Pg 1-10"
+                            placeholderTextColor="#64748B"
+                            value={item.pageNumber}
+                            onChangeText={(val) => updateTocItem(index, 'pageNumber', val)}
+                        />
+                        {details.tableOfContents.length > 1 && (
+                            <TouchableOpacity onPress={() => removeTocItem(index)} style={styles.removeIcon}>
+                                <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                ))}
+            </View>
+
+            <View style={styles.footer}>
+                <TouchableOpacity style={styles.backBtn} onPress={() => setCurrentStep(1)}>
+                    <AppText style={styles.backText}>Back</AppText>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.submitBtn} onPress={handleContinue}>
+                    <AppText style={styles.submitText}>Next</AppText>
+                    <Ionicons name="arrow-forward" size={18} color="white" style={{ marginLeft: 8 }} />
+                </TouchableOpacity>
+            </View>
         </View>
     );
 
@@ -217,12 +369,15 @@ const UploadNotes = ({ navigation }) => {
             <View style={styles.priceInputWrapper}>
                 <AppText style={styles.currency}>₹</AppText>
                 <TextInput
-                    style={styles.priceInput}
+                    style={[styles.priceInput, validationErrors.includes('price') && { color: '#EF4444' }]}
                     keyboardType="numeric"
                     placeholder="0"
                     placeholderTextColor="#64748B"
                     value={details.price}
-                    onChangeText={(val) => setDetails({ ...details, price: val })}
+                    onChangeText={(val) => {
+                        setDetails({ ...details, price: val });
+                        setValidationErrors(prev => prev.filter(e => e !== 'price'));
+                    }}
                 />
             </View>
 
@@ -243,7 +398,7 @@ const UploadNotes = ({ navigation }) => {
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={styles.container}
         >
-            <Loader visible={isLoading } />
+            <Loader visible={isLoading} />
             <View style={styles.headerRow}>
                 <TouchableOpacity onPress={() => navigation.goBack()}>
                     <Ionicons name="close" size={24} color="white" />
@@ -437,6 +592,53 @@ const styles = StyleSheet.create({
         fontSize: 15,
         borderWidth: 1,
         borderColor: '#334155',
+    },
+    readOnlyInput: {
+        backgroundColor: 'rgba(30, 41, 59, 0.5)',
+        borderRadius: 12,
+        paddingVertical: 15,
+        paddingHorizontal: 15,
+        borderWidth: 1,
+        borderColor: '#334155',
+        opacity: 0.8,
+    },
+    readOnlyText: {
+        color: '#94A3B8',
+        fontSize: 15,
+    },
+    textArea: {
+        height: 100,
+        paddingTop: 15,
+    },
+    inputError: {
+        borderColor: '#EF4444',
+        backgroundColor: 'rgba(239, 68, 68, 0.05)',
+    },
+    rowBetweenNoMargin: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 10,
+    },
+    addBtnText: {
+        color: '#00B1FC',
+        fontSize: 14,
+        fontWeight: 'bold',
+    },
+    tocRow: {
+        flexDirection: 'row',
+        gap: 10,
+        marginBottom: 10,
+        alignItems: 'center',
+    },
+    tocTitleInput: {
+        flex: 3,
+    },
+    tocPageInput: {
+        flex: 1.5,
+    },
+    removeIcon: {
+        padding: 5,
     },
     summaryCard: {
         backgroundColor: '#1E293B',

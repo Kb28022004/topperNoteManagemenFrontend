@@ -2,7 +2,10 @@ import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Use 10.0.2.2 for Android Emulator, localhost for iOS Simulator
-const ADMIN_API = `http://192.168.21.32:8000/api/v1/admin`;
+import { API_BASE_URL } from "../../config";
+
+// Use 10.0.2.2 for Android Emulator, localhost for iOS Simulator
+const ADMIN_API = `${API_BASE_URL}/admin`;
 
 export const adminApi = createApi({
   reducerPath: "adminApi",

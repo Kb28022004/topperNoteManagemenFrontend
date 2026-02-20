@@ -3,7 +3,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Use 10.0.2.2 for Android Emulator, localhost for iOS Simulator
 // Use 10.0.2.2 for Android Emulator to access host machine
-const TOPPER_API = `http://192.168.21.32:8000/api/v1/toppers`;
+import { API_BASE_URL } from "../../config";
+
+// Use 10.0.2.2 for Android Emulator, localhost for iOS Simulator
+// Use 10.0.2.2 for Android Emulator to access host machine
+const TOPPER_API = `${API_BASE_URL}/toppers`;
 
 export const topperApi = createApi({
   reducerPath: "topperApi",
@@ -15,7 +19,7 @@ export const topperApi = createApi({
       return headers;
     },
   }),
-  tagTypes: ['TopperProfile'],
+  tagTypes: ['TopperProfile', 'PublicTopper'],
   
   endpoints: (builder) => ({
 
@@ -48,11 +52,41 @@ export const topperApi = createApi({
       providesTags: ['TopperProfile'],
     }),
 
+    // Follow Topper
+    followTopper: builder.mutation({
+      query: (topperId) => ({
+        url: `/${topperId}/follow`,
+        method: "POST",
+      }),
+      invalidatesTags: (result, error, arg) => [{ type: 'PublicTopper', id: arg }],
+    }),
+
+    // Get Public Profile
+    getPublicProfile: builder.query({
+      query: (userId) => ({
+        url: `/${userId}/public`,
+        method: "GET",
+      }),
+      providesTags: (result, error, arg) => [{ type: 'PublicTopper', id: arg }],
+    }),
+
+    // Get All Toppers
+    getAllToppers: builder.query({
+      query: () => ({
+        url: "/",
+        method: "GET",
+      }),
+      providesTags: ['PublicTopper'],
+    }),
+
   }),
 });
 
 export const {
   useSaveBasicProfileMutation,
   useSubmitVerificationMutation,
-  useGetProfileQuery
+  useGetProfileQuery,
+  useFollowTopperMutation,
+  useGetPublicProfileQuery,
+  useGetAllToppersQuery,
 } = topperApi;

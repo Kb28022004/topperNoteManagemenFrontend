@@ -8,42 +8,51 @@ import {
     TextInput,
     FlatList,
     Dimensions,
-    RefreshControl
+    RefreshControl,
+    ActivityIndicator
 } from 'react-native';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
+import useDebounceSearch from '../../hooks/useDebounceSearch';
+import useRefresh from '../../hooks/useRefresh';
 import AppText from '../../components/AppText';
 import { useGetNotesQuery } from '../../features/api/noteApi';
 import { useGetProfileQuery } from '../../features/api/studentApi';
+import { useGetAllToppersQuery } from '../../features/api/topperApi';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Alert } from 'react-native';
+import { capitalize } from '../../helpers/capitalize';
+import Loader from '../../components/Loader';
+import SearchBar from '../../components/SearchBar';
+import CategoryFilters from '../../components/CategoryFilters';
+import NoDataFound from '../../components/NoDataFound';
+import { useAlert } from '../../context/AlertContext';
+import { Theme } from '../../theme/Theme';
 
 const { width } = Dimensions.get('window');
 
 const StudentHome = ({ navigation }) => {
+    const { showAlert } = useAlert();
     const [userBasic, setUserBasic] = useState(null);
-    const [searchQuery, setSearchQuery] = useState('');
+    const { searchQuery, localSearch, setLocalSearch } = useDebounceSearch();
     const [activeCategory, setActiveCategory] = useState('All');
 
     const handleLogout = () => {
-        Alert.alert(
+        showAlert(
             "Logout",
             "Are you sure you want to logout?",
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Logout",
-                    style: "destructive",
-                    onPress: async () => {
-                        await AsyncStorage.clear();
-                        navigation.reset({
-                            index: 0,
-                            routes: [{ name: 'Welcome' }],
-                        });
-                    }
+            "warning",
+            {
+                showCancel: true,
+                confirmText: "Logout",
+                onConfirm: async () => {
+                    await AsyncStorage.clear();
+                    navigation.reset({
+                        index: 0,
+                        routes: [{ name: 'Welcome' }],
+                    });
                 }
-            ]
+            }
         );
     };
 
@@ -61,65 +70,68 @@ const StudentHome = ({ navigation }) => {
     // Fetch detailed profile
     const { data: studentProfile, isLoading: profileLoading, refetch: refetchProfile } = useGetProfileQuery();
 
-    // Dynamic categories based on student's registered subjects
-    const categories = ['All', ...(studentProfile?.subjects || [])];
 
-    // Fetch notes based on active category (Subject) and Search
+    // Dynamic names matching Store.jsx
+    const categories = ['All', ...(studentProfile?.subjects?.map(s => capitalize(s)) || [])];
+
     // Backend automatically enforces Class and Board based on Student Profile
-    const { data: notesData, isLoading: notesLoading, refetch: refetchNotes } = useGetNotesQuery({
+    const { data: notesData, isLoading: notesLoading, isFetching: notesFetching, refetch: refetchNotes } = useGetNotesQuery({
         subject: activeCategory === 'All' ? undefined : activeCategory,
         search: searchQuery || undefined,
-    }, {
-        skip: !studentProfile // Wait for profile to load
     });
 
-    const [refreshing, setRefreshing] = useState(false);
+    // Compute Trending Notes (Highly rated, limited to top 6)
+    const trendingNotes = React.useMemo(() => {
+        const notesArray = notesData?.notes || [];
+        return [...notesArray]
+            .sort((a, b) => (parseFloat(b.rating) || 0) - (parseFloat(a.rating) || 0))
+            .slice(0, 6);
+    }, [notesData]);
+    // Fetch Toppers
+    const { data: toppersData, isLoading: toppersLoading, isFetching: toppersFetching, error: toppersError, refetch: refetchToppers } = useGetAllToppersQuery(undefined);
+
+
+    console.log("DEBUG StudentHome:", {
+        profile: !!studentProfile,
+        profileLoading,
+        notesCount: notesData?.notes?.length || 0,
+        toppersData: toppersData ? (toppersData.data ? toppersData.data.length : "no-data-field") : "undefined",
+        toppersLoading,
+        toppersError: toppersError || "no-error"
+    });
+
+    const handleRefreshAction = useCallback(async () => {
+        try {
+            await refetchProfile?.();
+            const promises = [];
+            if (studentProfile) {
+                promises.push(refetchToppers?.());
+                promises.push(refetchNotes?.());
+            }
+            if (promises.length > 0) await Promise.all(promises);
+        } catch (error) {
+            console.error("Refresh Error:", error);
+        }
+    }, [refetchProfile, refetchToppers, refetchNotes, studentProfile]);
+
+    const { refreshing, onRefresh } = useRefresh(handleRefreshAction);
 
     useFocusEffect(
         useCallback(() => {
             refetchProfile?.();
             if (studentProfile) {
+                refetchToppers?.();
                 refetchNotes?.();
             }
-        }, [refetchProfile, refetchNotes, studentProfile])
+        }, [refetchProfile, refetchToppers, refetchNotes, studentProfile])
     );
-
-    const onRefresh = React.useCallback(async () => {
-        setRefreshing(true);
-        try {
-            await refetchProfile?.().unwrap();
-            if (studentProfile) {
-                await refetchNotes?.().unwrap();
-            }
-        } catch (err) {
-            console.log("Refresh Error:", err);
-        } finally {
-            setRefreshing(false);
-        }
-    }, [refetchProfile, refetchNotes, studentProfile]);
-
-    const renderCategoryItem = ({ item }) => (
-        <TouchableOpacity
-            style={[
-                styles.categoryChip,
-                activeCategory === item && styles.activeCategoryChip
-            ]}
-            onPress={() => setActiveCategory(item)}
-        >
-            <AppText style={[
-                styles.categoryText,
-                activeCategory === item && styles.activeCategoryText
-            ]}>
-                {item}
-            </AppText>
-        </TouchableOpacity>
-    );
+    if (profileLoading) return <Loader visible />;
 
     const renderNoteCard = ({ item }) => (
         <TouchableOpacity
             activeOpacity={0.9}
             style={styles.noteCard}
-            onPress={() => navigation.navigate('NotePreview', { noteId: item._id })}
+            onPress={() => navigation.navigate('StudentNoteDetails', { noteId: item._id })}
         >
             <Image
                 source={item.thumbnail ? { uri: item.thumbnail } : require('../../../assets/topper.avif')}
@@ -156,7 +168,7 @@ const StudentHome = ({ navigation }) => {
                     />
                     <View style={styles.welcomeTextContainer}>
                         <AppText style={styles.welcomeBack}>Class {studentProfile?.class} {studentProfile?.stream ? `• ${studentProfile.stream.split(' ')[0]}` : ''}</AppText>
-                        <AppText style={styles.userName} weight="bold">Hi, {studentProfile?.firstName || 'Student'}</AppText>
+                        <AppText style={styles.userName} weight="bold">Hi, {studentProfile?.fullName || 'Student'}</AppText>
                     </View>
                 </View>
                 <View style={styles.headerActions}>
@@ -189,31 +201,19 @@ const StudentHome = ({ navigation }) => {
                 </AppText>
 
                 {/* Search Bar */}
-                <View style={styles.searchContainer}>
-                    <View style={styles.searchInputWrapper}>
-                        <Feather name="search" size={20} color="#94A3B8" />
-                        <TextInput
-                            style={styles.searchInput}
-                            placeholder={`Search ${studentProfile?.subjects?.[0] || 'Physics'}...`}
-                            placeholderTextColor="#64748B"
-                            value={searchQuery}
-                            onChangeText={setSearchQuery}
-                        />
-                    </View>
-                    <TouchableOpacity style={styles.filterBtn}>
-                        <Ionicons name="options-outline" size={24} color="#00B1FC" />
-                    </TouchableOpacity>
-                </View>
+                <SearchBar
+                    value={localSearch}
+                    onChangeText={setLocalSearch}
+                    placeholder={`Search ${studentProfile?.subjects?.[0] || 'Physics'}...`}
+
+                />
 
                 {/* Categories */}
-                <FlatList
-                    data={categories}
-                    renderItem={renderCategoryItem}
-                    keyExtractor={item => item}
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={styles.categoriesList}
-                    contentContainerStyle={{ gap: 10 }}
+                <CategoryFilters
+                    categories={categories}
+                    activeCategory={activeCategory}
+                    onSelectCategory={setActiveCategory}
+                    style={{ marginBottom: 25 }}
                 />
 
                 {/* Promo Banner */}
@@ -237,48 +237,104 @@ const StudentHome = ({ navigation }) => {
                             </View>
                         </LinearGradient>
                     </TouchableOpacity>
+
+                    <TouchableOpacity activeOpacity={0.9} onPress={() => navigation.navigate('Store')}>
+                        <LinearGradient
+                            colors={['#8B5CF6', '#7C3AED', '#6D28D9']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={styles.promoBanner}
+                        >
+                            <View style={styles.promoContent}>
+                                <View style={[styles.saleBadge, { backgroundColor: 'rgba(255, 255, 255, 0.15)' }]}>
+                                    <AppText style={styles.saleText} weight="bold">NEW RELEASES</AppText>
+                                </View>
+                                <AppText style={styles.promoTitle} weight="bold">Verified Topper{'\n'}Handwritten Notes</AppText>
+                                <AppText style={styles.promoSubtitle}>Strictly as per latest board pattern</AppText>
+                            </View>
+                            <View style={styles.promoIllustration}>
+                                <MaterialCommunityIcons name="certificate" size={80} color="rgba(255,255,255,0.3)" />
+                            </View>
+                        </LinearGradient>
+                    </TouchableOpacity>
                 </ScrollView>
 
+
                 {/* Trending Notes */}
-                <View style={styles.sectionHeader}>
+                <View style={[styles.sectionHeader, { marginTop: 25 }]}>
                     <AppText style={styles.sectionTitle} weight="bold">Trending Notes</AppText>
-                    <TouchableOpacity>
+                    <TouchableOpacity onPress={() => navigation.navigate('Store')}>
                         <AppText style={styles.seeAll}>See all</AppText>
                     </TouchableOpacity>
                 </View>
 
                 <FlatList
-                    data={notesData?.notes || [1, 2, 3]} // Mock data if empty
+                    data={trendingNotes}
                     renderItem={renderNoteCard}
-                    keyExtractor={(item, index) => index.toString()}
+                    keyExtractor={(item, index) => item._id || index.toString()}
                     horizontal
                     showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={{ gap: 15, paddingBottom: 100 }}
+                    contentContainerStyle={{ gap: 15, paddingBottom: 10 }}
+                    ListEmptyComponent={
+                        (notesLoading || notesFetching) ? (
+                            <View style={{ height: 200, width: width - 40, justifyContent: 'center', alignItems: 'center' }}>
+                                <ActivityIndicator size="large" color="#00B1FC" />
+                            </View>
+                        ) : (
+                            <NoDataFound
+                                message="No notes found."
+                                containerStyle={{ width: width - 40, marginTop: 20 }}
+                            />
+                        )
+                    }
+                />
+
+                {/* Meet Our Toppers */}
+                <View style={[styles.sectionHeader, { marginTop: 25 }]}>
+                    <AppText style={styles.sectionTitle} weight="bold">Meet Our Toppers</AppText>
+                    <TouchableOpacity onPress={() => navigation.navigate('Store')}>
+                        <AppText style={styles.seeAll}>View all</AppText>
+                    </TouchableOpacity>
+                </View>
+
+                <FlatList
+                    horizontal
+                    data={toppersData?.data || []}
+                    keyExtractor={(item) => item.id || item.userId}
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.toppersList}
+                    renderItem={({ item }) => (
+                        <TouchableOpacity
+                            style={styles.topperCard}
+                            onPress={() => navigation.navigate('PublicTopperProfile', { topperId: item.topperId || item.userId })}
+                        >
+                            <Image
+                                source={item.profilePhoto ? { uri: item.profilePhoto } : require('../../../assets/topper.avif')}
+                                style={styles.topperAvatar}
+                            />
+                            <AppText style={styles.topperName} numberOfLines={1} weight="medium">
+                                {item.name?.split(' ')[0]}
+                            </AppText>
+                            <View style={styles.topperRankBadge}>
+                                <Ionicons name="trophy" size={8} color="#FFD700" />
+                                <AppText style={styles.topperRankText}>Topper</AppText>
+                            </View>
+                        </TouchableOpacity>
+                    )}
+                    ListEmptyComponent={
+                        (toppersLoading || toppersFetching) ? (
+                            <View style={{ height: 120, width: width - 40, justifyContent: 'center', alignItems: 'center' }}>
+                                <ActivityIndicator size="large" color="#00B1FC" />
+                            </View>
+                        ) : (
+                            <NoDataFound
+                                message="No toppers found for your class."
+                                containerStyle={{ width: width - 40, marginHorizontal: 0, paddingVertical: 20 }}
+                            />
+                        )
+                    }
                 />
             </ScrollView>
-
-            {/* Bottom Navigation (Mock for now, should be in Navigator) */}
-            <View style={styles.bottomNav}>
-                <TouchableOpacity style={styles.navItem}>
-                    <Ionicons name="home" size={24} color="#00B1FC" />
-                    <AppText style={[styles.navText, { color: '#00B1FC' }]}>Home</AppText>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.navItem}>
-                    <Ionicons name="library-outline" size={24} color="#94A3B8" />
-                    <AppText style={styles.navText}>My Library</AppText>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.cartButton}>
-                    <Ionicons name="cart" size={30} color="white" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.navItem}>
-                    <Ionicons name="storefront-outline" size={24} color="#94A3B8" />
-                    <AppText style={styles.navText}>Store</AppText>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.navItem}>
-                    <Ionicons name="person-outline" size={24} color="#94A3B8" />
-                    <AppText style={styles.navText}>Profile</AppText>
-                </TouchableOpacity>
-            </View>
         </View>
     );
 };
@@ -290,13 +346,13 @@ const styles = StyleSheet.create({
         paddingTop: 50,
     },
     scrollContent: {
-        paddingHorizontal: 20,
+        paddingHorizontal: Theme.layout.screenPadding,
     },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingHorizontal: 20,
+        paddingHorizontal: Theme.layout.screenPadding,
         marginBottom: 20,
     },
     profileSection: {
@@ -411,13 +467,13 @@ const styles = StyleSheet.create({
         marginBottom: 30,
     },
     promoBanner: {
-        width: width - 40,
+        width: Theme.layout.windowWidth - (Theme.layout.screenPadding * 2),
         height: 180,
         backgroundColor: '#2563EB',
         borderRadius: 24,
         flexDirection: 'row',
         overflow: 'hidden',
-        padding: 20,
+        padding: Theme.layout.screenPadding,
     },
     promoContent: {
         flex: 1,
@@ -447,7 +503,7 @@ const styles = StyleSheet.create({
     promoIllustration: {
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: -20,
+        marginRight: -Theme.layout.screenPadding,
     },
     sectionHeader: {
         flexDirection: 'row',
@@ -514,6 +570,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
+        // Removed paddingHorizontal from here as it's causing issues with the button alignment
     },
     price: {
         color: '#00B1FC',
@@ -566,7 +623,47 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 8,
-    }
+    },
+    toppersList: {
+        paddingVertical: 10,
+        gap: 15,
+    },
+    topperCard: {
+        alignItems: 'center',
+        backgroundColor: '#1E293B',
+        padding: 12,
+        borderRadius: 20,
+        width: 100,
+        borderWidth: 1,
+        borderColor: '#334155',
+    },
+    topperAvatar: {
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        borderWidth: 2,
+        borderColor: '#00B1FC',
+        marginBottom: 8,
+    },
+    topperName: {
+        color: 'white',
+        fontSize: 12,
+        marginBottom: 4,
+    },
+    topperRankBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255, 215, 0, 0.15)',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 8,
+        gap: 3,
+    },
+    topperRankText: {
+        color: '#FFD700',
+        fontSize: 8,
+        fontWeight: 'bold',
+    },
 });
 
 export default StudentHome;
