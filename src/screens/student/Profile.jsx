@@ -6,16 +6,22 @@ import {
     Image,
     TouchableOpacity,
     RefreshControl,
-    Dimensions
+    Dimensions,
+    FlatList,
+    ActivityIndicator
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
-import { useGetProfileQuery } from '../../features/api/studentApi';
+import { useGetProfileQuery, useUpdateProfilePictureMutation } from '../../features/api/studentApi';
 import useRefresh from '../../hooks/useRefresh';
+import * as ImagePicker from 'expo-image-picker';
 import AppText from '../../components/AppText';
 import Loader from '../../components/Loader';
 import { Theme } from '../../theme/Theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAlert } from '../../context/AlertContext';
+
+import { useSelector } from 'react-redux';
+import NoDataFound from '../../components/NoDataFound';
 
 const { width } = Dimensions.get('window');
 
@@ -23,6 +29,18 @@ const Profile = ({ navigation }) => {
     const { showAlert } = useAlert();
     const { data: profile, isLoading, isError, refetch } = useGetProfileQuery();
     const { refreshing, onRefresh } = useRefresh(refetch);
+    const { sessionSeconds } = useSelector(state => state.usage);
+    const [updatePhoto, { isLoading: isUpdatingPhoto }] = useUpdateProfilePictureMutation();
+
+    const formatRealTime = (baseHours, extraSeconds) => {
+        const totalSeconds = Math.round((baseHours || 0) * 3600) + extraSeconds;
+        const h = Math.floor(totalSeconds / 3600);
+        const m = Math.floor((totalSeconds % 3600) / 60);
+        const s = totalSeconds % 60;
+
+        if (h > 0) return `${h}h ${m}m ${s}s`;
+        return `${m}m ${s}s`;
+    };
 
     const handleLogout = () => {
         showAlert(
@@ -43,6 +61,38 @@ const Profile = ({ navigation }) => {
         );
     };
 
+    const handleUpdatePhoto = async () => {
+        try {
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ['images'],
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.8,
+            });
+
+            if (!result.canceled) {
+                const selectedImage = result.assets[0];
+                const formData = new FormData();
+
+                const filename = selectedImage.uri.split('/').pop();
+                const match = /\.(\w+)$/.exec(filename);
+                const type = match ? `image/${match[1]}` : `image`;
+
+                formData.append("photo", {
+                    uri: selectedImage.uri,
+                    name: filename,
+                    type
+                });
+
+                await updatePhoto(formData).unwrap();
+                showAlert("Success", "Profile picture updated!", "success");
+            }
+        } catch (error) {
+            console.error("Update photo error:", error);
+            showAlert("Error", "Failed to update profile picture", "error");
+        }
+    };
+
     if (isLoading) return <Loader visible />;
 
     const stats = [
@@ -53,8 +103,8 @@ const Profile = ({ navigation }) => {
             color: '#3B82F6'
         },
         {
-            label: 'HOURS\nSTUDIED',
-            value: `${profile?.stats?.hoursStudied || 0}h`,
+            label: 'STUDIED',
+            value: formatRealTime(profile?.stats?.hoursStudied || 0, sessionSeconds),
             icon: 'clock-outline',
             color: '#10B981'
         },
@@ -67,9 +117,10 @@ const Profile = ({ navigation }) => {
     ];
 
     const menuItems = [
-        { title: 'Payment Methods', icon: 'credit-card-outline', type: 'material' },
-        { title: 'Transaction History', icon: 'file-document-outline', type: 'material' },
-        { title: 'Account Settings', icon: 'account-cog-outline', type: 'material' }
+        { title: 'My Following', icon: 'account-group-outline', screen: 'FollowingList' },
+        { title: 'Payment Methods', icon: 'credit-card-outline' },
+        { title: 'Transaction History', icon: 'file-document-outline', screen: 'TransactionHistory' },
+        { title: 'Account Settings', icon: 'account-cog-outline', screen: 'AccountSettings' }
     ];
 
     return (
@@ -92,8 +143,16 @@ const Profile = ({ navigation }) => {
                             source={profile?.profilePhoto ? { uri: profile.profilePhoto } : require('../../../assets/student.avif')}
                             style={styles.profileImage}
                         />
-                        <TouchableOpacity style={styles.editBtn}>
-                            <Ionicons name="pencil" size={14} color="white" />
+                        <TouchableOpacity
+                            style={styles.editBtn}
+                            onPress={handleUpdatePhoto}
+                            disabled={isUpdatingPhoto}
+                        >
+                            {isUpdatingPhoto ? (
+                                <ActivityIndicator size="small" color="white" />
+                            ) : (
+                                <Ionicons name="camera" size={16} color="white" />
+                            )}
                         </TouchableOpacity>
                     </View>
 
@@ -121,7 +180,11 @@ const Profile = ({ navigation }) => {
                 {/* Menu List */}
                 <View style={styles.menuContainer}>
                     {menuItems.map((item, index) => (
-                        <TouchableOpacity key={index} style={[styles.menuItem, index === menuItems.length - 1 && { borderBottomWidth: 0 }]}>
+                        <TouchableOpacity
+                            key={index}
+                            style={[styles.menuItem, index === menuItems.length - 1 && { borderBottomWidth: 0 }]}
+                            onPress={() => item.screen && navigation.navigate(item.screen)}
+                        >
                             <View style={styles.menuItemLeft}>
                                 <View style={styles.menuIconContainer}>
                                     <MaterialCommunityIcons name={item.icon} size={20} color="white" />
@@ -173,6 +236,7 @@ const Profile = ({ navigation }) => {
                     />
                 )}
             </ScrollView>
+            <Loader visible={isUpdatingPhoto} />
         </View>
     );
 };
@@ -250,10 +314,11 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         paddingHorizontal: Theme.layout.screenPadding,
         marginBottom: 30,
+        gap: 10
     },
     statCard: {
+        width: (width - (Theme.layout.screenPadding * 2 + 20)) / 3,
         backgroundColor: '#1E293B',
-        width: (width - (Theme.layout.screenPadding * 2 + 30)) / 3,
         height: 100,
         borderRadius: 16,
         padding: 12,
@@ -269,9 +334,10 @@ const styles = StyleSheet.create({
     statValue: {
         fontSize: 22,
         color: 'white',
-        marginBottom: 4,
+        marginTop: 20,
     },
     statLabel: {
+        width: '100%',
         fontSize: 9,
         color: '#94A3B8',
         lineHeight: 12,
@@ -382,6 +448,76 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(59, 130, 246, 0.1)',
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    toppersList: {
+        paddingVertical: 10,
+        paddingLeft: Theme.layout.screenPadding,
+        gap: 15,
+    },
+    topperCard: {
+        alignItems: 'center',
+        backgroundColor: '#1E293B',
+        padding: 12,
+        borderRadius: 20,
+        width: 100,
+        borderWidth: 1,
+        borderColor: '#334155',
+    },
+    topperAvatarContainer: {
+        position: 'relative',
+        marginBottom: 8,
+    },
+    topperAvatar: {
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        borderWidth: 2,
+        borderColor: '#3B82F6',
+    },
+    topperStatusDot: {
+        position: 'absolute',
+        bottom: 2,
+        right: 2,
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+        backgroundColor: '#10B981',
+        borderWidth: 2,
+        borderColor: '#1E293B',
+    },
+    topperName: {
+        color: 'white',
+        fontSize: 12,
+        marginBottom: 4,
+    },
+    topperRankBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255, 215, 0, 0.1)',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 6,
+        gap: 3,
+    },
+    topperRankText: {
+        color: '#FFD700',
+        fontSize: 8,
+        fontWeight: 'bold',
+    },
+    noFollowingContainer: {
+        backgroundColor: 'rgba(255,255,255,0.03)',
+        marginHorizontal: Theme.layout.screenPadding,
+        borderRadius: 16,
+        padding: 20,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.05)',
+        marginBottom: 35,
+        borderStyle: 'dashed',
+    },
+    noFollowingText: {
+        color: '#64748B',
+        fontSize: 13,
     }
 });
 

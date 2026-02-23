@@ -52,9 +52,9 @@ const NoteCard = ({ note, onPress, onAddToCart }) => {
                         {note?.price ? `₹${note?.price}` : 'Free'}
                     </AppText>
 
-                    <TouchableOpacity style={styles.cartButton} onPress={onAddToCart}>
-                        <Ionicons name="bag-handle" size={16} color="white" />
-                    </TouchableOpacity>
+                    <View style={[styles.cartButton, { backgroundColor: note?.isPurchased ? '#10B981' : '#3B82F6' }]}>
+                        <Ionicons name={note?.isPurchased ? "lock-open" : "lock-closed"} size={16} color="white" />
+                    </View>
                 </View>
             </View>
         </TouchableOpacity>

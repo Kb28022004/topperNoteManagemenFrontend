@@ -19,7 +19,7 @@ export const studentApi = createApi({
       return headers;
     },
   }),
-  tagTypes: ["StudentProfile"],
+  tagTypes: ["StudentProfile", "FollowedToppers"],
   endpoints: (builder) => ({
 
     // Create Profile
@@ -37,10 +37,59 @@ export const studentApi = createApi({
       transformResponse: (response) => response.data,
       providesTags: ["StudentProfile"],
     }),
+
+    getFollowedToppers: builder.query({
+      query: (params) => ({
+        url: "/followed-toppers",
+        params: params,
+      }),
+      transformResponse: (response) => response.data,
+      providesTags: ["FollowedToppers"],
+    }),
+
+    updateStats: builder.mutation({
+      query: (data) => ({
+        url: "/stats",
+        method: "PATCH",
+        body: data,
+      }),
+      invalidatesTags: ["StudentProfile"],
+    }),
+
+    updateProfilePicture: builder.mutation({
+      query: (formData) => ({
+        url: "/profile-picture",
+        method: "PATCH",
+        body: formData,
+      }),
+      invalidatesTags: ["StudentProfile"],
+    }),
+
+    updateProfile: builder.mutation({
+      query: (data) => ({
+        url: "/profile",
+        method: "PATCH",
+        body: data,
+      }),
+      invalidatesTags: ["StudentProfile"],
+    }),
+
+    deleteAccount: builder.mutation({
+      query: () => ({
+        url: "/",
+        method: "DELETE",
+      }),
+      invalidatesTags: ["StudentProfile"],
+    }),
   }),
 });
 
 export const {
   useCreateProfileMutation,
   useGetProfileQuery,
-} = studentApi ;
+  useGetFollowedToppersQuery,
+  useUpdateStatsMutation,
+  useUpdateProfilePictureMutation,
+  useUpdateProfileMutation,
+  useDeleteAccountMutation,
+} = studentApi;

@@ -14,6 +14,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useGetPurchasedNotesQuery } from '../../features/api/noteApi';
 import useRefresh from '../../hooks/useRefresh';
 import useDebounceSearch from '../../hooks/useDebounceSearch';
+import { getDownloadedNotes, deleteDownloadedNote } from '../../helpers/downloadService';
 import AppText from '../../components/AppText';
 import SearchBar from '../../components/SearchBar';
 import NoDataFound from '../../components/NoDataFound';
@@ -71,14 +72,22 @@ const MyLibrary = ({ navigation }) => {
         await refetch();
     });
 
+    const [downloadedNotes, setDownloadedNotes] = useState([]);
+
+    const fetchDownloads = useCallback(async () => {
+        const downloads = await getDownloadedNotes();
+        setDownloadedNotes(downloads);
+    }, []);
+
     // Auto-refresh when screen comes into focus
     useFocusEffect(
         useCallback(() => {
+            fetchDownloads();
             if (isSuccess || isError) {
                 setPage(1);
                 refetch();
             }
-        }, [refetch, isSuccess, isError])
+        }, [refetch, isSuccess, isError, fetchDownloads])
     );
 
     useEffect(() => {
@@ -92,45 +101,84 @@ const MyLibrary = ({ navigation }) => {
     }, [isError, error]);
 
     const handleLoadMore = () => {
-        if (!isFetching && hasMore) {
+        if (activeTab === 'Purchases' && !isFetching && hasMore) {
             setPage(prev => prev + 1);
         }
     };
 
-    const renderNoteCard = ({ item }) => (
-        <View style={styles.card}>
-            <View style={styles.cardContent}>
-                <View style={styles.textSection}>
-                    <View style={styles.offlineBadge}>
-                        <Ionicons name="cloud-done-outline" size={14} color="#00B1FC" />
-                        <AppText style={styles.offlineText}>OFFLINE READY</AppText>
+    const handleDeleteDownload = (id) => {
+        showAlert(
+            "Delete Download",
+            "Are you sure you want to remove this note from offline storage?",
+            "warning",
+            {
+                showCancel: true,
+                confirmText: "Delete",
+                onConfirm: async () => {
+                    await deleteDownloadedNote(id);
+                    fetchDownloads();
+                }
+            }
+        );
+    };
+
+    const renderNoteCard = ({ item }) => {
+        const isOffline = activeTab === 'Downloaded' || downloadedNotes.some(d => d.id === item._id || d.id === item.id);
+
+        return (
+            <View style={styles.card}>
+                <View style={styles.cardContent}>
+                    <View style={styles.textSection}>
+                        {isOffline && (
+                            <View style={styles.offlineBadge}>
+                                <Ionicons name="cloud-done-outline" size={14} color="#10B981" />
+                                <AppText style={[styles.offlineText, { color: '#10B981' }]}>DOWNLOADED</AppText>
+                            </View>
+                        )}
+                        {!isOffline && (
+                            <View style={styles.offlineBadge}>
+                                <Ionicons name="cloud-download-outline" size={14} color="#00B1FC" />
+                                <AppText style={styles.offlineText}>AVAILABLE OFFLINE</AppText>
+                            </View>
+                        )}
+
+                        <AppText style={styles.noteTitle} weight="bold" numberOfLines={1}>
+                            {item.title || `${item.subject} Notes`}
+                        </AppText>
+
+                        <AppText style={styles.topperName} numberOfLines={1}>
+                            By {item.topperName || 'Verified Topper'}
+                        </AppText>
+
+                        <View style={styles.cardActions}>
+                            <TouchableOpacity
+                                style={styles.readButton}
+                                onPress={() => navigation.navigate('NotePreview', { noteId: item._id || item.id, isLocal: activeTab === 'Downloaded' })}
+                            >
+                                <AppText style={styles.readButtonText} weight="bold">Read Now</AppText>
+                            </TouchableOpacity>
+
+                            {activeTab === 'Downloaded' && (
+                                <TouchableOpacity
+                                    style={styles.deleteBtn}
+                                    onPress={() => handleDeleteDownload(item.id)}
+                                >
+                                    <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                                </TouchableOpacity>
+                            )}
+                        </View>
                     </View>
 
-                    <AppText style={styles.noteTitle} weight="bold" numberOfLines={1}>
-                        {item.title || `${item.subject} Notes`}
-                    </AppText>
-
-                    <AppText style={styles.topperName} numberOfLines={1}>
-                        By {item.topperName || 'Verified Topper'}
-                    </AppText>
-
-                    <TouchableOpacity
-                        style={styles.readButton}
-                        onPress={() => navigation.navigate('NotePreview', { noteId: item._id })}
-                    >
-                        <AppText style={styles.readButtonText} weight="bold">Read Now</AppText>
-                    </TouchableOpacity>
-                </View>
-
-                <View style={styles.imageSection}>
-                    <Image
-                        source={item.thumbnail ? { uri: item.thumbnail } : require('../../../assets/topper.avif')}
-                        style={styles.noteImage}
-                    />
+                    <View style={styles.imageSection}>
+                        <Image
+                            source={item.thumbnail ? { uri: item.thumbnail } : require('../../../assets/topper.avif')}
+                            style={styles.noteImage}
+                        />
+                    </View>
                 </View>
             </View>
-        </View>
-    );
+        );
+    };
 
     return (
         <View style={styles.container}>
@@ -175,9 +223,9 @@ const MyLibrary = ({ navigation }) => {
 
             {/* List */}
             <FlatList
-                data={activeTab === 'Purchases' ? allNotes : []}
+                data={activeTab === 'Purchases' ? allNotes : downloadedNotes}
                 renderItem={renderNoteCard}
-                keyExtractor={(item, index) => `${item._id}-${index}`}
+                keyExtractor={(item, index) => `${item._id || item.id}-${index}`}
                 contentContainerStyle={styles.listContent}
                 onEndReached={handleLoadMore}
                 onEndReachedThreshold={0.5}
@@ -344,6 +392,14 @@ const styles = StyleSheet.create({
         width: '100%',
         height: '100%',
         resizeMode: 'cover',
+    },
+    cardActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 15,
+    },
+    deleteBtn: {
+        padding: 5,
     }
 });
 

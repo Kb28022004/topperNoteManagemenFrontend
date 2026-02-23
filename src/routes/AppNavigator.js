@@ -21,6 +21,11 @@ import AdminDashboard from '../screens/admin/AdminDashboard';
 import Store from '../screens/student/Store';
 import MyLibrary from '../screens/student/MyLibrary';
 import Profile from '../screens/student/Profile';
+import FollowingList from '../screens/student/FollowingList';
+import TransactionHistory from '../screens/student/TransactionHistory';
+import TransactionDetails from '../screens/student/TransactionDetails';
+import AccountSettings from '../screens/student/AccountSettings';
+import EditAcademicProfile from '../screens/student/EditAcademicProfile';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useState, useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -209,6 +214,11 @@ export default function AppNavigator() {
         </Stack.Screen>
 
         <Stack.Screen name="PublicTopperProfile" component={require('../screens/topper/PublicTopperProfile').default} />
+        <Stack.Screen name="FollowingList" component={FollowingList} />
+        <Stack.Screen name="TransactionHistory" component={TransactionHistory} />
+        <Stack.Screen name="TransactionDetails" component={TransactionDetails} />
+        <Stack.Screen name="AccountSettings" component={AccountSettings} />
+        <Stack.Screen name="EditAcademicProfile" component={EditAcademicProfile} />
 
         <Stack.Screen name="AdminProfileSetup">
           {(props) => (

@@ -7,6 +7,7 @@ const SearchBar = ({
     onChangeText,
     placeholder = "Search...",
     onFilterPress,
+    isFilterActive = false,
     style
 }) => {
     return (
@@ -22,8 +23,16 @@ const SearchBar = ({
                     returnKeyType="search"
                 />
             </View>
-            <TouchableOpacity style={styles.filterBtn} onPress={onFilterPress}>
-                <Ionicons name="options-outline" size={24} color="#00B1FC" />
+            <TouchableOpacity
+                style={[styles.filterBtn, isFilterActive && styles.filterBtnActive]}
+                onPress={onFilterPress}
+            >
+                <Ionicons
+                    name="options-outline"
+                    size={24}
+                    color={isFilterActive ? '#fff' : '#00B1FC'}
+                />
+                {isFilterActive && <View style={styles.activeDot} />}
             </TouchableOpacity>
         </View>
     );
@@ -63,6 +72,22 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         borderWidth: 1,
         borderColor: '#334155',
+        position: 'relative',
+    },
+    filterBtnActive: {
+        backgroundColor: '#3B82F6',
+        borderColor: '#3B82F6',
+    },
+    activeDot: {
+        position: 'absolute',
+        top: 9,
+        right: 9,
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#FBBF24',
+        borderWidth: 1.5,
+        borderColor: '#3B82F6',
     },
 });
 

@@ -31,10 +31,19 @@ export const paymentApi = createApi({
       }),
       invalidatesTags: ["Orders"],
     }),
+    getTransactionHistory: builder.query({
+      query: (params) => ({
+        url: "/history",
+        params
+      }),
+      transformResponse: (response) => response.data,
+      providesTags: ["Orders"],
+    }),
   }),
 });
 
 export const {
   useCreateOrderMutation,
-  useVerifyPaymentMutation
+  useVerifyPaymentMutation,
+  useGetTransactionHistoryQuery
 } = paymentApi;

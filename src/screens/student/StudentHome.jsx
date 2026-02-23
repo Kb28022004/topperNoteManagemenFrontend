@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     View,
     StyleSheet,
@@ -26,6 +26,7 @@ import Loader from '../../components/Loader';
 import SearchBar from '../../components/SearchBar';
 import CategoryFilters from '../../components/CategoryFilters';
 import NoDataFound from '../../components/NoDataFound';
+import SortModal from '../../components/SortModal';
 import { useAlert } from '../../context/AlertContext';
 import { Theme } from '../../theme/Theme';
 
@@ -36,6 +37,29 @@ const StudentHome = ({ navigation }) => {
     const [userBasic, setUserBasic] = useState(null);
     const { searchQuery, localSearch, setLocalSearch } = useDebounceSearch();
     const [activeCategory, setActiveCategory] = useState('All');
+    const [sortBy, setSortBy] = useState('newest');
+    const [timeRange, setTimeRange] = useState('all');
+    const [isSortModalVisible, setIsSortModalVisible] = useState(false);
+
+    // Auto-slide Carousel Logic
+    const scrollRef = useRef(null);
+    const [currentSlide, setCurrentSlide] = useState(0);
+    const promoCount = 2; // We currently have 2 promo banners
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setCurrentSlide((prev) => {
+                const next = (prev + 1) % promoCount;
+                scrollRef.current?.scrollTo({
+                    x: next * (Theme.layout.windowWidth - (Theme.layout.screenPadding * 2)),
+                    animated: true
+                });
+                return next;
+            });
+        }, 4000); // Auto-slide every 4 seconds
+
+        return () => clearInterval(timer);
+    }, []);
 
     const handleLogout = () => {
         showAlert(
@@ -78,27 +102,18 @@ const StudentHome = ({ navigation }) => {
     const { data: notesData, isLoading: notesLoading, isFetching: notesFetching, refetch: refetchNotes } = useGetNotesQuery({
         subject: activeCategory === 'All' ? undefined : activeCategory,
         search: searchQuery || undefined,
+        sortBy: sortBy,
+        timeRange: timeRange,
     });
 
-    // Compute Trending Notes (Highly rated, limited to top 6)
-    const trendingNotes = React.useMemo(() => {
-        const notesArray = notesData?.notes || [];
-        return [...notesArray]
-            .sort((a, b) => (parseFloat(b.rating) || 0) - (parseFloat(a.rating) || 0))
-            .slice(0, 6);
+    // Compute Trending Notes - If sorted by rating, use directly, otherwise sort manually for home
+    const displayNotes = React.useMemo(() => {
+        return notesData?.notes || [];
     }, [notesData]);
+
     // Fetch Toppers
     const { data: toppersData, isLoading: toppersLoading, isFetching: toppersFetching, error: toppersError, refetch: refetchToppers } = useGetAllToppersQuery(undefined);
 
-
-    console.log("DEBUG StudentHome:", {
-        profile: !!studentProfile,
-        profileLoading,
-        notesCount: notesData?.notes?.length || 0,
-        toppersData: toppersData ? (toppersData.data ? toppersData.data.length : "no-data-field") : "undefined",
-        toppersLoading,
-        toppersError: toppersError || "no-error"
-    });
 
     const handleRefreshAction = useCallback(async () => {
         try {
@@ -139,7 +154,7 @@ const StudentHome = ({ navigation }) => {
             />
             <View style={styles.ratingBadge}>
                 <Ionicons name="star" size={12} color="#FFD700" />
-                <AppText style={styles.ratingText}>{item.rating || '4.8'}</AppText>
+                <AppText style={styles.ratingText}>{item.stats?.ratingAvg || '4.8'}</AppText>
             </View>
             <View style={styles.noteDetails}>
                 <AppText style={styles.noteTitle} numberOfLines={1}>{item.title || `${item.subject} - ${item.chapterName}`}</AppText>
@@ -149,9 +164,9 @@ const StudentHome = ({ navigation }) => {
                 </View>
                 <View style={styles.priceRow}>
                     <AppText style={styles.price}>₹{item.price}</AppText>
-                    <TouchableOpacity style={styles.addButton}>
-                        <Ionicons name="add" size={20} color="white" />
-                    </TouchableOpacity>
+                    <View style={[styles.addButton, { backgroundColor: item.isPurchased ? '#10B981' : '#3B82F6' }]}>
+                        <Ionicons name={item.isPurchased ? "lock-open" : "lock-closed"} size={16} color="white" />
+                    </View>
                 </View>
             </View>
         </TouchableOpacity>
@@ -200,12 +215,13 @@ const StudentHome = ({ navigation }) => {
                     <AppText style={styles.headlineHighlight}>next exam?</AppText>
                 </AppText>
 
-                {/* Search Bar */}
+                {/* Search Bar — filter icon opens Sort Modal */}
                 <SearchBar
                     value={localSearch}
                     onChangeText={setLocalSearch}
                     placeholder={`Search ${studentProfile?.subjects?.[0] || 'Physics'}...`}
-
+                    onFilterPress={() => setIsSortModalVisible(true)}
+                    isFilterActive={sortBy !== 'newest' || timeRange !== 'all'}
                 />
 
                 {/* Categories */}
@@ -217,7 +233,19 @@ const StudentHome = ({ navigation }) => {
                 />
 
                 {/* Promo Banner */}
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} pagingEnabled style={styles.promoScroll}>
+                <ScrollView
+                    ref={scrollRef}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    pagingEnabled
+                    style={styles.promoScroll}
+                    onMomentumScrollEnd={(e) => {
+                        const contentOffset = e.nativeEvent.contentOffset.x;
+                        const viewSize = e.nativeEvent.layoutMeasurement.width;
+                        const index = Math.floor(contentOffset / viewSize);
+                        setCurrentSlide(index);
+                    }}
+                >
                     <TouchableOpacity activeOpacity={0.9}>
                         <LinearGradient
                             colors={['#2563EB', '#1D4ED8', '#1E40AF']}
@@ -260,16 +288,23 @@ const StudentHome = ({ navigation }) => {
                 </ScrollView>
 
 
-                {/* Trending Notes */}
+                {/* Notes Section Title changes based on sort */}
                 <View style={[styles.sectionHeader, { marginTop: 25 }]}>
-                    <AppText style={styles.sectionTitle} weight="bold">Trending Notes</AppText>
+                    <AppText style={styles.sectionTitle} weight="bold">
+                        {sortBy === 'rating' ? 'Highest Rated Notes' :
+                            sortBy === 'price_low' ? 'Best Deals' :
+                                sortBy === 'price_high' ? 'Premium Notes' :
+                                    timeRange === '24h' ? '🔥 Last 24 Hours' :
+                                        timeRange === '7d' ? "This Week's Notes" :
+                                            timeRange === '1m' ? "This Month's Notes" : 'Trending Notes'}
+                    </AppText>
                     <TouchableOpacity onPress={() => navigation.navigate('Store')}>
                         <AppText style={styles.seeAll}>See all</AppText>
                     </TouchableOpacity>
                 </View>
 
                 <FlatList
-                    data={trendingNotes}
+                    data={displayNotes}
                     renderItem={renderNoteCard}
                     keyExtractor={(item, index) => item._id || index.toString()}
                     horizontal
@@ -334,7 +369,17 @@ const StudentHome = ({ navigation }) => {
                         )
                     }
                 />
+                <View style={{ height: 100 }} />
             </ScrollView>
+
+            <SortModal
+                visible={isSortModalVisible}
+                onClose={() => setIsSortModalVisible(false)}
+                selectedSort={sortBy}
+                onSelectSort={setSortBy}
+                selectedTime={timeRange}
+                onSelectTime={setTimeRange}
+            />
         </View>
     );
 };
@@ -410,38 +455,33 @@ const styles = StyleSheet.create({
     headlineHighlight: {
         color: '#00B1FC',
     },
-    searchContainer: {
+    searchRow: {
         flexDirection: 'row',
         alignItems: 'center',
+        gap: 12,
         marginBottom: 20,
     },
-    searchInputWrapper: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#1E293B',
-        borderRadius: 12,
-        paddingHorizontal: 15,
-        height: 55,
-        borderWidth: 1,
-        borderColor: '#334155',
-    },
-    searchInput: {
-        flex: 1,
-        marginLeft: 10,
-        color: 'white',
-        fontSize: 15,
-    },
-    filterBtn: {
+    sortBtn: {
         width: 55,
         height: 55,
         backgroundColor: '#1E293B',
-        borderRadius: 12,
-        marginLeft: 10,
+        borderRadius: 16,
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 1,
         borderColor: '#334155',
+        position: 'relative',
+    },
+    activeSortDot: {
+        position: 'absolute',
+        top: 12,
+        right: 12,
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#3B82F6',
+        borderWidth: 1.5,
+        borderColor: '#1E293B',
     },
     categoriesList: {
         marginBottom: 25,
@@ -570,7 +610,6 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        // Removed paddingHorizontal from here as it's causing issues with the button alignment
     },
     price: {
         color: '#00B1FC',
@@ -586,43 +625,6 @@ const styles = StyleSheet.create({
         borderColor: '#334155',
         justifyContent: 'center',
         alignItems: 'center',
-    },
-    bottomNav: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: 90,
-        backgroundColor: '#0F172A',
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        alignItems: 'center',
-        paddingHorizontal: 15,
-        borderTopWidth: 1,
-        borderTopColor: '#1E293B',
-    },
-    navItem: {
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    navText: {
-        fontSize: 10,
-        color: '#94A3B8',
-        marginTop: 4,
-    },
-    cartButton: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        backgroundColor: '#00B1FC',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginTop: -30,
-        elevation: 5,
-        shadowColor: '#00B1FC',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
     },
     toppersList: {
         paddingVertical: 10,

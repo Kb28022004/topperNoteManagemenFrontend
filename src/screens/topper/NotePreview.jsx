@@ -5,7 +5,8 @@ import {
     TouchableOpacity,
     Image,
     Dimensions,
-    StatusBar
+    StatusBar,
+    ActivityIndicator
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
@@ -16,6 +17,7 @@ import AppText from '../../components/AppText';
 import { useGetNoteDetailsQuery } from '../../features/api/noteApi';
 import Loader from '../../components/Loader';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { downloadNote, isNoteDownloaded, getDownloadedNotes } from '../../helpers/downloadService';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAlert } from '../../context/AlertContext';
 
@@ -27,6 +29,7 @@ const NotePreview = ({ route, navigation }) => {
     const { data: note, isLoading, refetch } = useGetNoteDetailsQuery(noteId);
     const [currentPageIndex, setCurrentPageIndex] = useState(0);
     const [userData, setUserData] = useState(null);
+    const [isFullScreen, setIsFullScreen] = useState(false);
 
     // 0. Safety: Guarded Refetch on focus
     useFocusEffect(
@@ -50,6 +53,12 @@ const NotePreview = ({ route, navigation }) => {
         };
     }, []);
 
+    const [isDownloaded, setIsDownloaded] = useState(false);
+    const [isDownloading, setIsDownloading] = useState(false);
+    const [downloadProgress, setDownloadProgress] = useState(0);
+
+    const [localNote, setLocalNote] = useState(null);
+
     // 2. Load User Data for Watermark
     useEffect(() => {
         const loadUser = async () => {
@@ -57,18 +66,57 @@ const NotePreview = ({ route, navigation }) => {
             if (userStr) setUserData(JSON.parse(userStr));
         };
         loadUser();
-    }, []);
 
-    if (isLoading) return <Loader visible />;
+        if (noteId) {
+            const checkDownload = async () => {
+                const status = await isNoteDownloaded(noteId);
+                setIsDownloaded(status);
+                if (status) {
+                    const downloads = await getDownloadedNotes();
+                    const found = downloads.find(d => d.id === noteId);
+                    if (found) setLocalNote(found);
+                }
+            };
+            checkDownload();
+        }
+    }, [noteId]);
 
-    const previewImages = note?.previewImages || [];
-    const totalPages = note?.pageCount || 0;
-    const isPurchased = note?.isPurchased;
+    const displayNote = note || localNote;
+
+    if (isLoading && !localNote) return <Loader visible />;
+
+    const previewImages = displayNote?.previewImages || (localNote?.thumbnail ? [localNote.thumbnail] : []);
+    const totalPages = displayNote?.pageCount || 0;
+    const isPurchased = displayNote?.isPurchased || !!localNote;
     const hasMorePages = totalPages > previewImages.length;
+
+    const handleDownload = async () => {
+        if (isDownloaded) {
+            showAlert("In-App Offline", "This note is already downloaded and available in your library for offline access.", "success");
+            return;
+        }
+
+        try {
+            setIsDownloading(true);
+            setDownloadProgress(0);
+
+            await downloadNote(note, (progress) => {
+                setDownloadProgress(progress);
+            });
+
+            setIsDownloaded(true);
+            setIsDownloading(false);
+            showAlert("Success", "Note downloaded for offline access! You can find it in 'My Library' under the Downloaded tab.", "success");
+        } catch (error) {
+            console.error("Download Error:", error);
+            setIsDownloading(false);
+            showAlert("Error", "Failed to download note. Please try again.", "error");
+        }
+    };
 
     const handleBuyNow = () => {
         // Navigation to payment or checkout
-        showAlert("Unlock Full Access", `Purchase this note for ₹${note?.price?.current} to view all ${totalPages} pages and download the PDF.`, "info", {
+        showAlert("Unlock Full Access", `Purchase this note for ₹${displayNote?.price?.current} to view all ${totalPages} pages and download the PDF.`, "info", {
             confirmText: "Okay"
         });
     };
@@ -78,26 +126,28 @@ const NotePreview = ({ route, navigation }) => {
             <StatusBar barStyle="light-content" />
 
             {/* Header */}
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-                    <Ionicons name="chevron-back" size={24} color="white" />
-                </TouchableOpacity>
-                <View style={styles.headerInfo}>
-                    <AppText style={styles.noteTitle} weight="bold" numberOfLines={1}>
-                        {note?.subject}: {note?.chapterName}
-                    </AppText>
-                    <View style={styles.topperRow}>
-                        <AppText style={styles.topperText}>Topper: </AppText>
-                        <AppText style={styles.topperName} weight="bold">{note?.topper?.name}</AppText>
+            {!isFullScreen && (
+                <View style={styles.header}>
+                    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+                        <Ionicons name="chevron-back" size={24} color="white" />
+                    </TouchableOpacity>
+                    <View style={styles.headerInfo}>
+                        <AppText style={styles.noteTitle} weight="bold" numberOfLines={1}>
+                            {displayNote?.subject}: {displayNote?.chapterName || displayNote?.title}
+                        </AppText>
+                        <View style={styles.topperRow}>
+                            <AppText style={styles.topperText}>Topper: </AppText>
+                            <AppText style={styles.topperName} weight="bold">{displayNote?.topper?.name || displayNote?.topperName}</AppText>
+                        </View>
+                    </View>
+                    <View style={styles.pageIndicatorBox}>
+                        <AppText style={styles.pageCountText}>{currentPageIndex + 1} / {previewImages.length}</AppText>
                     </View>
                 </View>
-                <View style={styles.pageIndicatorBox}>
-                    <AppText style={styles.pageCountText}>{currentPageIndex + 1} / {previewImages.length}</AppText>
-                </View>
-            </View>
+            )}
 
             {/* Note Content */}
-            <View style={styles.contentContainer}>
+            <View style={[styles.contentContainer, isFullScreen && styles.fullScreenContent]}>
                 <View style={styles.imageWrapper}>
                     {previewImages.length > 0 ? (
                         <Image
@@ -111,16 +161,45 @@ const NotePreview = ({ route, navigation }) => {
                         </View>
                     )}
 
-                    {/* Dynamic Watermark Overlay (Repeated for security) */}
-                    <View style={styles.watermarkLayer} pointerEvents="none">
-                        {[1, 2, 3, 4, 5, 6].map((i) => (
-                            <View key={i} style={[styles.watermarkRow, { marginTop: i * 80 }]}>
-                                <AppText style={styles.watermarkText}>
-                                    UID: {userData?.id?.slice(-6) || 'STUDENT'} • UNAUTHORIZED SHARING PROHIBITED • PROPERTY OF TOPPERSNOTE
-                                </AppText>
-                            </View>
-                        ))}
+                    {/* Navigation Buttons */}
+                    <View style={styles.navOverlay} pointerEvents="box-none">
+                        {currentPageIndex > 0 && (
+                            <TouchableOpacity
+                                style={[styles.navBtn, styles.navBtnPrev]}
+                                onPress={() => setCurrentPageIndex(prev => prev - 1)}
+                            >
+                                <Ionicons name="chevron-back" size={32} color="white" />
+                            </TouchableOpacity>
+                        )}
+
+                        {currentPageIndex < previewImages.length - 1 && (
+                            <TouchableOpacity
+                                style={[styles.navBtn, styles.navBtnNext]}
+                                onPress={() => setCurrentPageIndex(prev => prev + 1)}
+                            >
+                                <Ionicons name="chevron-forward" size={32} color="white" />
+                            </TouchableOpacity>
+                        )}
                     </View>
+
+                    {isFullScreen && (
+                        <TouchableOpacity style={styles.exitFullScreenBtn} onPress={() => setIsFullScreen(false)}>
+                            <Ionicons name="close" size={24} color="white" />
+                        </TouchableOpacity>
+                    )}
+
+                    {/* Dynamic Watermark Overlay */}
+                    {!isPurchased && (
+                        <View style={styles.watermarkLayer} pointerEvents="none">
+                            {[1, 2, 3, 4, 5, 6].map((i) => (
+                                <View key={i} style={[styles.watermarkRow, { marginTop: i * 80 }]}>
+                                    <AppText style={styles.watermarkText}>
+                                        UID: {userData?.id?.slice(-6) || 'STUDENT'} • UNAUTHORIZED SHARING PROHIBITED • PROPERTY OF TOPPERSNOTE
+                                    </AppText>
+                                </View>
+                            ))}
+                        </View>
+                    )}
 
                     {/* Protected Content Badge */}
                     <View style={styles.protectedBadge}>
@@ -131,55 +210,65 @@ const NotePreview = ({ route, navigation }) => {
             </View>
 
             {/* Footer / Controls */}
-            <View style={styles.footer}>
-                {!isPurchased && hasMorePages && (
-                    <TouchableOpacity style={styles.buyBtn} onPress={handleBuyNow}>
-                        <LinearGradient
-                            colors={['#00B1FC', '#007FFF']}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 0 }}
-                            style={styles.buyGradient}
-                        >
-                            <Ionicons name="cart-outline" size={20} color="white" />
-                            <AppText style={styles.buyBtnText} weight="bold">Unlock {totalPages - previewImages.length} more pages - ₹{note?.price?.current}</AppText>
-                        </LinearGradient>
-                    </TouchableOpacity>
-                )}
+            {!isFullScreen && (
+                <View style={styles.footer}>
+                    {!isPurchased && hasMorePages && (
+                        <TouchableOpacity style={styles.buyBtn} onPress={handleBuyNow}>
+                            <LinearGradient
+                                colors={['#00B1FC', '#007FFF']}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                                style={styles.buyGradient}
+                            >
+                                <Ionicons name="cart-outline" size={20} color="white" />
+                                <AppText style={styles.buyBtnText} weight="bold">Unlock {totalPages - previewImages.length} more pages - ₹{displayNote?.price?.current}</AppText>
+                            </LinearGradient>
+                        </TouchableOpacity>
+                    )}
 
-                <View style={styles.pageSliderRow}>
-                    <AppText style={styles.pageLabel}>Page {currentPageIndex + 1}</AppText>
-                    <AppText style={styles.pageLabel}>{previewImages.length} Pages Available</AppText>
-                </View>
-
-                {previewImages.length > 1 && (
-                    <Slider
-                        style={styles.slider}
-                        minimumValue={0}
-                        maximumValue={previewImages.length - 1}
-                        step={1}
-                        value={currentPageIndex}
-                        onValueChange={setCurrentPageIndex}
-                        minimumTrackTintColor="#00B1FC"
-                        maximumTrackTintColor="#1E293B"
-                        thumbTintColor="#00B1FC"
-                    />
-                )}
-
-                <View style={styles.controlsRow}>
-                    <TouchableOpacity style={styles.controlBtn}>
-                        <Feather name="grid" size={22} color="#94A3B8" />
-                    </TouchableOpacity>
-
-                    <View style={styles.screenshotBlocked}>
-                        <MaterialCommunityIcons name="eye-off-outline" size={16} color="#EF4444" style={{ marginRight: 8 }} />
-                        <AppText style={styles.blockedText}>SCREEN RECORDING BLOCKED</AppText>
+                    <View style={styles.pageSliderRow}>
+                        <AppText style={styles.pageLabel}>Page {currentPageIndex + 1}</AppText>
+                        <AppText style={styles.pageLabel}>{previewImages.length} Pages Available</AppText>
                     </View>
 
-                    <TouchableOpacity style={styles.controlBtn} disabled={!isPurchased}>
-                        <Feather name="download" size={22} color={isPurchased ? "#00B1FC" : "#334155"} />
-                    </TouchableOpacity>
+                    {previewImages.length > 1 && (
+                        <Slider
+                            style={styles.slider}
+                            minimumValue={0}
+                            maximumValue={previewImages.length - 1}
+                            step={1}
+                            value={currentPageIndex}
+                            onValueChange={setCurrentPageIndex}
+                            minimumTrackTintColor="#00B1FC"
+                            maximumTrackTintColor="#1E293B"
+                            thumbTintColor="#00B1FC"
+                        />
+                    )}
+
+                    <View style={styles.controlsRow}>
+                        <TouchableOpacity style={styles.controlBtn} onPress={() => setIsFullScreen(true)}>
+                            <MaterialCommunityIcons name="fullscreen" size={24} color="#00B1FC" />
+                        </TouchableOpacity>
+
+                        <View style={styles.screenshotBlocked}>
+                            <MaterialCommunityIcons name="eye-off-outline" size={16} color="#EF4444" style={{ marginRight: 8 }} />
+                            <AppText style={styles.blockedText}>SCREEN RECORDING BLOCKED</AppText>
+                        </View>
+
+                        <TouchableOpacity
+                            style={[styles.controlBtn, isDownloaded && { backgroundColor: '#059669' }]}
+                            disabled={!isPurchased || isDownloading}
+                            onPress={handleDownload}
+                        >
+                            {isDownloading ? (
+                                <ActivityIndicator size="small" color="white" />
+                            ) : (
+                                <Feather name={isDownloaded ? "check" : "download"} size={22} color={isPurchased ? "white" : "#334155"} />
+                            )}
+                        </TouchableOpacity>
+                    </View>
                 </View>
-            </View>
+            )}
         </SafeAreaView>
     );
 };
@@ -355,6 +444,39 @@ const styles = StyleSheet.create({
         color: '#EF4444',
         fontSize: 10,
         fontWeight: 'bold',
+    },
+    fullScreenContent: {
+        marginHorizontal: 0,
+        marginVertical: 0,
+        borderRadius: 0,
+        borderWidth: 0,
+    },
+    navOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 10,
+    },
+    navBtn: {
+        width: 54,
+        height: 54,
+        borderRadius: 27,
+        backgroundColor: 'rgba(0, 0, 0, 0.4)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    exitFullScreenBtn: {
+        position: 'absolute',
+        top: 40,
+        right: 20,
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 10,
     }
 });
 

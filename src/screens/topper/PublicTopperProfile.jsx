@@ -101,9 +101,9 @@ const PublicTopperProfile = ({ route, navigation }) => {
                         {item.price ? <AppText style={styles.strikePrice}>₹{item.price * 2}</AppText> : null}
                         <AppText style={styles.price}>{item.price ? `₹${item.price}` : 'Free'}</AppText>
                     </View>
-                    <TouchableOpacity style={styles.cartBtn}>
+                    {/* <TouchableOpacity style={styles.cartBtn}>
                         <Ionicons name="cart-outline" size={18} color="white" />
-                    </TouchableOpacity>
+                    </TouchableOpacity> */}
                 </View>
             </View>
         </TouchableOpacity>

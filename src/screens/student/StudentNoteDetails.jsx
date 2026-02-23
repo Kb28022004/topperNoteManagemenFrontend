@@ -24,6 +24,8 @@ import { useDispatch } from 'react-redux';
 import { useAlert } from '../../context/AlertContext';
 import useRefresh from '../../hooks/useRefresh';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { downloadNote, isNoteDownloaded } from '../../helpers/downloadService';
+import { Theme } from '../../theme/Theme';
 
 const { width } = Dimensions.get('window');
 
@@ -44,6 +46,9 @@ const StudentNoteDetails = ({ route, navigation }) => {
     const [user, setUser] = useState(null);
 
     const [following, setFollowing] = useState(false);
+    const [isDownloaded, setIsDownloaded] = useState(false);
+    const [downloadProgress, setDownloadProgress] = useState(0);
+    const [isDownloading, setIsDownloading] = useState(false);
     const { showAlert } = useAlert();
     const dispatch = useDispatch();
 
@@ -58,6 +63,11 @@ const StudentNoteDetails = ({ route, navigation }) => {
     useEffect(() => {
         if (note) {
             setFollowing(note.isFollowing);
+            const checkDownload = async () => {
+                const status = await isNoteDownloaded(note.id);
+                setIsDownloaded(status);
+            };
+            checkDownload();
         }
     }, [note]);
 
@@ -126,6 +136,30 @@ const StudentNoteDetails = ({ route, navigation }) => {
             console.log("Review Error:", error);
             const errorMessage = error?.data?.message || "Failed to add review";
             showAlert("Error", errorMessage, "error");
+        }
+    };
+
+    const handleDownload = async () => {
+        if (isDownloaded) {
+            showAlert("In-App Offline", "This note is already downloaded and available in your library for offline access.", "success");
+            return;
+        }
+
+        try {
+            setIsDownloading(true);
+            setDownloadProgress(0);
+
+            await downloadNote(note, (progress) => {
+                setDownloadProgress(progress);
+            });
+
+            setIsDownloaded(true);
+            setIsDownloading(false);
+            showAlert("Success", "Note downloaded for offline access! You can find it in 'My Library' under the Downloaded tab.", "success");
+        } catch (error) {
+            console.error("Download Error:", error);
+            setIsDownloading(false);
+            showAlert("Error", "Failed to download note. Please try again.", "error");
         }
     };
 
@@ -241,8 +275,10 @@ const StudentNoteDetails = ({ route, navigation }) => {
                         style={styles.previewBtn}
                         onPress={() => navigation.navigate('NotePreview', { noteId })}
                     >
-                        <Ionicons name="eye" size={20} color="white" style={{ marginRight: 8 }} />
-                        <AppText style={styles.previewBtnText}>Watermarked Preview</AppText>
+                        <Ionicons name={isPurchased ? "book-outline" : "eye"} size={20} color="white" style={{ marginRight: 8 }} />
+                        <AppText style={styles.previewBtnText}>
+                            {isPurchased ? "Read Full Notes" : "Watermarked Preview"}
+                        </AppText>
                     </TouchableOpacity>
                 </View>
 
@@ -253,9 +289,9 @@ const StudentNoteDetails = ({ route, navigation }) => {
                     <AppText style={styles.title} weight="bold">{title}</AppText>
                     <View style={styles.ratingMeta}>
                         <Ionicons name="star" size={16} color="#FFD700" />
-                        <AppText style={styles.ratingValue} weight="bold">{avgRating || '4.8'}</AppText>
+                        <AppText style={styles.ratingValue} weight="bold">{avgRating}</AppText>
                         <View style={styles.dot} />
-                        <AppText style={styles.reviewCount}>{reviewCount || 124} Reviews</AppText>
+                        <AppText style={styles.reviewCount}>{reviewCount || 0} Reviews</AppText>
                     </View>
 
                     {/* Topper Card */}
@@ -362,11 +398,20 @@ const StudentNoteDetails = ({ route, navigation }) => {
                 </View>
 
                 {isPurchased ? (
-                    <ReusableButton
-                        title="Download PDF"
-                        onPress={() => showAlert("Download", "Downloading PDF...", "success")}
-                        style={{ width: 180 }}
-                    />
+                    <TouchableOpacity
+                        style={[styles.downloadBtnLarge, isDownloaded && { backgroundColor: '#10B981' }]}
+                        onPress={handleDownload}
+                        disabled={isDownloading}
+                    >
+                        <Ionicons
+                            name={isDownloading ? "cloud-download" : (isDownloaded ? "cloud-done" : "cloud-download-outline")}
+                            size={20}
+                            color="white"
+                        />
+                        <AppText style={styles.downloadBtnText} weight="bold">
+                            {isDownloading ? `Downloading ${Math.round(downloadProgress * 100)}%` : (isDownloaded ? "Offline Ready" : "Download PDF")}
+                        </AppText>
+                    </TouchableOpacity>
                 ) : (
                     <TouchableOpacity
                         style={styles.unlockBtn}
@@ -447,14 +492,13 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: 20,
-        paddingTop: 50,
+        paddingTop: 30,
         paddingBottom: 15,
         backgroundColor: '#0F172A',
         position: 'absolute',
         top: 0,
         left: 0,
         right: 0,
-        zIndex: 10,
     },
     headerTitle: {
         color: 'white',
@@ -800,6 +844,21 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         paddingVertical: 14,
         gap: 8,
+    },
+    downloadBtnLarge: {
+        backgroundColor: '#3B82F6',
+        borderRadius: 12,
+        paddingVertical: 14,
+        paddingHorizontal: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 180,
+        gap: 8,
+    },
+    downloadBtnText: {
+        color: 'white',
+        fontSize: 14,
     },
     unlockText: {
         color: 'white',
