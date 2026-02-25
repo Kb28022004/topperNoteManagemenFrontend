@@ -36,7 +36,25 @@ export const paymentApi = createApi({
         url: "/history",
         params
       }),
-      transformResponse: (response) => response.data,
+      serializeQueryArgs: ({ endpointName, queryArgs }) => {
+        const { page, limit, ...rest } = queryArgs || {};
+        return { endpointName, ...rest };
+      },
+      merge: (currentCache, newResponse, { arg }) => {
+        if (!arg?.page || arg.page === 1 || !currentCache) return newResponse;
+        const existingMap = new Map(
+          currentCache.transactions.map(t => [t.id || t._id, t])
+        );
+        newResponse.transactions.forEach(t => existingMap.set(t.id || t._id, t));
+        return { ...newResponse, transactions: Array.from(existingMap.values()) };
+      },
+      forceRefetch({ currentArg, previousArg }) {
+        return currentArg !== previousArg;
+      },
+      transformResponse: (response) => ({
+        transactions: response.data?.transactions || [],
+        pagination: response.data?.pagination || {}
+      }),
       providesTags: ["Orders"],
     }),
   }),

@@ -11,32 +11,30 @@ import {
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AppText from './AppText';
 
-const { width, height } = Dimensions.get('window');
+const { height } = Dimensions.get('window');
 
 const SORT_OPTIONS = [
-    { label: 'Newest First', value: 'newest', icon: 'clock-outline' },
+    { label: 'Recently Joined', value: 'newest', icon: 'clock-outline' },
+    { label: 'Popularity (Followers)', value: 'popularity', icon: 'trending-up' },
     { label: 'Highest Rated', value: 'rating', icon: 'star-outline' },
-    { label: 'Price: Low to High', value: 'price_low', icon: 'sort-ascending' },
-    { label: 'Price: High to Low', value: 'price_high', icon: 'sort-descending' },
 ];
 
-const TIME_OPTIONS = [
-    { label: 'All Time', value: 'all', icon: 'calendar-range' },
-    { label: 'Last 24 Hours', value: '24h', icon: 'history' },
-    { label: 'Last 7 Days', value: '7d', icon: 'calendar-week' },
-    { label: 'Last 1 Month', value: '1m', icon: 'calendar-month' },
+const CLASS_OPTIONS = ['10', '12'];
+const BOARD_OPTIONS = [
+    { label: 'CBSE', value: 'CBSE' },
+    { label: 'ICSE', value: 'ICSE' },
+    { label: 'State Board', value: 'STATE' }
 ];
 
-const SortModal = ({
+const TopperFilterModal = ({
     visible,
     onClose,
     selectedSort,
     onSelectSort,
-    selectedTime,
-    onSelectTime,
-    selectedSubject,
-    onSelectSubject,
-    subjects = []
+    selectedClass,
+    onSelectClass,
+    selectedBoard,
+    onSelectBoard
 }) => {
     return (
         <Modal
@@ -54,7 +52,7 @@ const SortModal = ({
                     <View style={styles.modalContent}>
                         <View style={styles.handle} />
                         <View style={styles.header}>
-                            <AppText style={styles.headerTitle} weight="bold">Filters & Sort</AppText>
+                            <AppText style={styles.headerTitle} weight="bold">Filter Toppers</AppText>
                             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
                                 <Ionicons name="close" size={24} color="#64748B" />
                             </TouchableOpacity>
@@ -93,66 +91,53 @@ const SortModal = ({
 
                             <View style={styles.separator} />
 
-                            {/* Subjects Section */}
-                            {subjects.length > 0 && (
-                                <>
-                                    <AppText style={styles.sectionLabel} weight="bold">BY SUBJECT</AppText>
-                                    <View style={styles.chipRow}>
-                                        <TouchableOpacity
-                                            style={[styles.subjectChip, !selectedSubject && styles.activeSubjectChip]}
-                                            onPress={() => onSelectSubject(null)}
-                                        >
-                                            <AppText style={[styles.subjectChipText, !selectedSubject && styles.activeSubjectChipText]}>All</AppText>
-                                        </TouchableOpacity>
-                                        {subjects.map((sub) => (
-                                            <TouchableOpacity
-                                                key={sub}
-                                                style={[styles.subjectChip, selectedSubject === sub && styles.activeSubjectChip]}
-                                                onPress={() => onSelectSubject(sub)}
-                                            >
-                                                <AppText style={[styles.subjectChipText, selectedSubject === sub && styles.activeSubjectChipText]}>{sub}</AppText>
-                                            </TouchableOpacity>
-                                        ))}
-                                    </View>
-                                    <View style={styles.separator} />
-                                </>
-                            )}
-
-                            {/* Time Section */}
-                            <AppText style={styles.sectionLabel} weight="bold">TIME PERIOD</AppText>
-                            {TIME_OPTIONS.map((option) => {
-                                const isSelected = selectedTime === option.value;
-                                return (
+                            {/* Class Filter */}
+                            <AppText style={styles.sectionLabel} weight="bold">CLASS</AppText>
+                            <View style={styles.chipRow}>
+                                <TouchableOpacity
+                                    style={[styles.chip, !selectedClass && styles.activeChip]}
+                                    onPress={() => onSelectClass(null)}
+                                >
+                                    <AppText style={[styles.chipText, !selectedClass && styles.activeChipText]}>All</AppText>
+                                </TouchableOpacity>
+                                {CLASS_OPTIONS.map((item) => (
                                     <TouchableOpacity
-                                        key={option.value}
-                                        style={[styles.item, isSelected && styles.selectedItem]}
-                                        onPress={() => onSelectTime(option.value)}
+                                        key={item}
+                                        style={[styles.chip, selectedClass === item && styles.activeChip]}
+                                        onPress={() => onSelectClass(item)}
                                     >
-                                        <View style={styles.itemContent}>
-                                            <MaterialCommunityIcons
-                                                name={option.icon}
-                                                size={20}
-                                                color={isSelected ? '#3B82F6' : '#94A3B8'}
-                                            />
-                                            <AppText
-                                                style={[styles.itemLabel, isSelected && styles.selectedLabel]}
-                                                weight={isSelected ? 'bold' : 'medium'}
-                                            >
-                                                {option.label}
-                                            </AppText>
-                                        </View>
-                                        {isSelected && (
-                                            <Ionicons name="checkmark-sharp" size={20} color="#3B82F6" />
-                                        )}
+                                        <AppText style={[styles.chipText, selectedClass === item && styles.activeChipText]}>Class {item}</AppText>
                                     </TouchableOpacity>
-                                );
-                            })}
+                                ))}
+                            </View>
+
+                            <View style={styles.separator} />
+
+                            {/* Board Filter */}
+                            <AppText style={styles.sectionLabel} weight="bold">BOARD</AppText>
+                            <View style={styles.chipRow}>
+                                <TouchableOpacity
+                                    style={[styles.chip, !selectedBoard && styles.activeChip]}
+                                    onPress={() => onSelectBoard(null)}
+                                >
+                                    <AppText style={[styles.chipText, !selectedBoard && styles.activeChipText]}>All</AppText>
+                                </TouchableOpacity>
+                                {BOARD_OPTIONS.map((item) => (
+                                    <TouchableOpacity
+                                        key={item.value}
+                                        style={[styles.chip, selectedBoard === item.value && styles.activeChip]}
+                                        onPress={() => onSelectBoard(item.value)}
+                                    >
+                                        <AppText style={[styles.chipText, selectedBoard === item.value && styles.activeChipText]}>{item.label}</AppText>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
 
                             <TouchableOpacity
                                 style={styles.applyBtn}
                                 onPress={onClose}
                             >
-                                <AppText style={styles.applyBtnText} weight="bold">Apply Changes</AppText>
+                                <AppText style={styles.applyBtnText} weight="bold">Apply Filters</AppText>
                             </TouchableOpacity>
 
                             <View style={{ height: 40 }} />
@@ -177,11 +162,6 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         borderTopLeftRadius: 30,
         borderTopRightRadius: 30,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -5 },
-        shadowOpacity: 0.3,
-        shadowRadius: 10,
-        elevation: 10,
         maxHeight: height * 0.8,
     },
     handle: {
@@ -196,8 +176,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 25,
-        paddingHorizontal: 5,
+        marginBottom: 20,
     },
     headerTitle: {
         fontSize: 18,
@@ -212,14 +191,14 @@ const styles = StyleSheet.create({
         letterSpacing: 1.5,
         marginBottom: 10,
         marginTop: 10,
-        paddingHorizontal: 10,
+        paddingHorizontal: 5,
     },
     item: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingVertical: 14,
-        paddingHorizontal: 14,
+        paddingVertical: 12,
+        paddingHorizontal: 12,
         borderRadius: 12,
         marginBottom: 6,
         backgroundColor: '#1E293B',
@@ -244,49 +223,53 @@ const styles = StyleSheet.create({
     separator: {
         height: 1,
         backgroundColor: 'rgba(255,255,255,0.05)',
-        marginVertical: 15,
-        marginHorizontal: 10,
+        marginVertical: 18,
+    },
+    chipRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 10,
+        paddingHorizontal: 2,
+        marginTop: 5,
+    },
+    chip: {
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 14,
+        backgroundColor: '#1E293B',
+        borderWidth: 1,
+        borderColor: '#334155',
+        minWidth: 70,
+        alignItems: 'center',
+    },
+    activeChip: {
+        backgroundColor: 'rgba(59, 130, 246, 0.15)',
+        borderColor: '#3B82F6',
+    },
+    chipText: {
+        color: '#94A3B8',
+        fontSize: 13,
+    },
+    activeChipText: {
+        color: '#3B82F6',
+        fontWeight: '700',
     },
     applyBtn: {
         backgroundColor: '#3B82F6',
-        paddingVertical: 15,
-        borderRadius: 12,
+        paddingVertical: 16,
+        borderRadius: 16,
         alignItems: 'center',
-        marginTop: 30,
-        marginBottom: 10,
-        marginHorizontal: 5,
+        marginTop: 35,
+        shadowColor: '#3B82F6',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 5,
     },
     applyBtnText: {
         color: 'white',
         fontSize: 16,
     },
-    chipRow: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 8,
-        paddingHorizontal: 10,
-        marginBottom: 10,
-    },
-    subjectChip: {
-        paddingHorizontal: 15,
-        paddingVertical: 8,
-        borderRadius: 20,
-        backgroundColor: '#1E293B',
-        borderWidth: 1,
-        borderColor: '#334155',
-    },
-    activeSubjectChip: {
-        backgroundColor: '#3B82F615',
-        borderColor: '#3B82F6',
-    },
-    subjectChipText: {
-        color: '#94A3B8',
-        fontSize: 13,
-    },
-    activeSubjectChipText: {
-        color: '#3B82F6',
-        fontWeight: 'bold',
-    }
 });
 
-export default SortModal;
+export default TopperFilterModal;

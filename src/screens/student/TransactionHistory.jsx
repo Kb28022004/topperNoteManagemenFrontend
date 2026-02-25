@@ -22,7 +22,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 const TransactionHistory = ({ navigation }) => {
     const [page, setPage] = useState(1);
     const [statusFilter, setStatusFilter] = useState(''); // '', 'SUCCESS', 'PENDING', 'FAILED'
-    const { searchQuery, localSearch, setLocalSearch } = useDebounceSearch(500);
+    const { searchQuery, localSearch, setLocalSearch } = useDebounceSearch('', 500);
     const [allTransactions, setAllTransactions] = useState([]);
     const [hasMore, setHasMore] = useState(true);
 

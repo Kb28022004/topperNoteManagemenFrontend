@@ -23,7 +23,7 @@ const NoDataFound = ({
 
 const styles = StyleSheet.create({
     container: {
-        width: '90%',
+        width: '100%',
         alignItems: 'center',
         justifyContent: 'center',
         paddingVertical: 40,

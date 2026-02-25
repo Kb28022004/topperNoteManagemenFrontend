@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
     View,
     StyleSheet,
@@ -7,8 +7,9 @@ import {
     TouchableOpacity,
     RefreshControl,
     Dimensions,
-    FlatList,
-    ActivityIndicator
+    ActivityIndicator,
+    StatusBar,
+    Switch
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { useGetProfileQuery, useUpdateProfilePictureMutation } from '../../features/api/studentApi';
@@ -16,18 +17,18 @@ import useRefresh from '../../hooks/useRefresh';
 import * as ImagePicker from 'expo-image-picker';
 import AppText from '../../components/AppText';
 import Loader from '../../components/Loader';
+import ScreenLoader from '../../components/ScreenLoader';
 import { Theme } from '../../theme/Theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAlert } from '../../context/AlertContext';
-
 import { useSelector } from 'react-redux';
-import NoDataFound from '../../components/NoDataFound';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const { width } = Dimensions.get('window');
 
 const Profile = ({ navigation }) => {
     const { showAlert } = useAlert();
-    const { data: profile, isLoading, isError, refetch } = useGetProfileQuery();
+    const { data: profile, isLoading, refetch } = useGetProfileQuery();
     const { refreshing, onRefresh } = useRefresh(refetch);
     const { sessionSeconds } = useSelector(state => state.usage);
     const [updatePhoto, { isLoading: isUpdatingPhoto }] = useUpdateProfilePictureMutation();
@@ -36,16 +37,15 @@ const Profile = ({ navigation }) => {
         const totalSeconds = Math.round((baseHours || 0) * 3600) + extraSeconds;
         const h = Math.floor(totalSeconds / 3600);
         const m = Math.floor((totalSeconds % 3600) / 60);
-        const s = totalSeconds % 60;
 
-        if (h > 0) return `${h}h ${m}m ${s}s`;
-        return `${m}m ${s}s`;
+        if (h > 0) return `${h}h ${m}m`;
+        return `${m}m`;
     };
 
     const handleLogout = () => {
         showAlert(
-            "Logout",
-            "Are you sure you want to sign out?",
+            "Sign Out",
+            "Are you sure you want to exit your session?",
             "warning",
             {
                 showCancel: true,
@@ -73,7 +73,6 @@ const Profile = ({ navigation }) => {
             if (!result.canceled) {
                 const selectedImage = result.assets[0];
                 const formData = new FormData();
-
                 const filename = selectedImage.uri.split('/').pop();
                 const match = /\.(\w+)$/.exec(filename);
                 const type = match ? `image/${match[1]}` : `image`;
@@ -85,46 +84,54 @@ const Profile = ({ navigation }) => {
                 });
 
                 await updatePhoto(formData).unwrap();
-                showAlert("Success", "Profile picture updated!", "success");
+                showAlert("Success", "Photo updated!", "success");
             }
         } catch (error) {
-            console.error("Update photo error:", error);
-            showAlert("Error", "Failed to update profile picture", "error");
+            showAlert("Error", "Failed to update photo", "error");
         }
     };
 
-    if (isLoading) return <Loader visible />;
-
-    const stats = [
+    const sections = [
         {
-            label: 'NOTES\nPURCHASED',
-            value: profile?.stats?.notesPurchased || 0,
-            icon: 'book-open-variant',
-            color: '#3B82F6'
+            title: 'Learning Journey',
+            items: [
+                { title: 'My Library', icon: 'library-outline', screen: 'MyLibrary', params: { initialTab: 'Purchases' }, color: '#00B1FC' },
+                { title: 'My Following', icon: 'people-outline', screen: 'FollowingList', color: '#A855F7' },
+                { title: 'Favourite Notes', icon: 'heart-outline', screen: 'MyLibrary', params: { initialTab: 'Favorites' }, color: '#F43F5E' },
+            ]
         },
         {
-            label: 'STUDIED',
-            value: formatRealTime(profile?.stats?.hoursStudied || 0, sessionSeconds),
-            icon: 'clock-outline',
-            color: '#10B981'
+            title: 'Payments & History',
+            items: [
+                { title: 'Transaction History', icon: 'receipt-outline', screen: 'TransactionHistory', color: '#10B981' },
+                { title: 'Purchase Methods', icon: 'card-outline', color: '#F43F5E' },
+            ]
         },
         {
-            label: 'SUBJECTS\nCOVERED',
-            value: profile?.stats?.subjectsCovered || 0,
-            icon: 'layers-outline',
-            color: '#F59E0B'
+            title: 'Personal Info',
+            items: [
+                { title: 'Edit Profile', icon: 'person-outline', screen: 'AccountSettings', color: '#6366F1' },
+                { title: 'Security', icon: 'shield-checkmark-outline', color: '#64748B' },
+            ]
         }
     ];
 
-    const menuItems = [
-        { title: 'My Following', icon: 'account-group-outline', screen: 'FollowingList' },
-        { title: 'Payment Methods', icon: 'credit-card-outline' },
-        { title: 'Transaction History', icon: 'file-document-outline', screen: 'TransactionHistory' },
-        { title: 'Account Settings', icon: 'account-cog-outline', screen: 'AccountSettings' }
-    ];
+    if (isLoading) return <ScreenLoader />;
 
     return (
         <View style={styles.container}>
+            <StatusBar barStyle="light-content" />
+
+            <View style={styles.header}>
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+                    <Ionicons name="chevron-back" size={24} color="white" />
+                </TouchableOpacity>
+                <AppText style={styles.headerTitle} weight="bold">Settings</AppText>
+                <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
+                    <Feather name="log-out" size={20} color="#EF4444" />
+                </TouchableOpacity>
+            </View>
+
             <ScrollView
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.scrollContent}
@@ -132,109 +139,113 @@ const Profile = ({ navigation }) => {
                     <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00B1FC" />
                 }
             >
-                {/* Header */}
-                <View style={styles.header}>
-                    <TouchableOpacity style={styles.settingsBtn} onPress={handleLogout}>
-                        <Ionicons name="settings-outline" size={24} color="white" />
-                    </TouchableOpacity>
-
-                    <View style={styles.profileImageContainer}>
+                {/* Profile Hero Section */}
+                <View style={styles.heroSection}>
+                    <View style={styles.avatarWrapper}>
                         <Image
                             source={profile?.profilePhoto ? { uri: profile.profilePhoto } : require('../../../assets/student.avif')}
-                            style={styles.profileImage}
+                            style={styles.avatar}
                         />
-                        <TouchableOpacity
-                            style={styles.editBtn}
-                            onPress={handleUpdatePhoto}
-                            disabled={isUpdatingPhoto}
-                        >
-                            {isUpdatingPhoto ? (
-                                <ActivityIndicator size="small" color="white" />
-                            ) : (
-                                <Ionicons name="camera" size={16} color="white" />
-                            )}
+                        <TouchableOpacity style={styles.editBadge} onPress={handleUpdatePhoto}>
+                            <Feather name="camera" size={12} color="white" />
                         </TouchableOpacity>
                     </View>
 
                     <AppText style={styles.userName} weight="bold">{profile?.fullName || 'Student Name'}</AppText>
-
-                    <View style={styles.badgeRow}>
-                        <View style={styles.classBadge}>
-                            <AppText style={styles.badgeText} weight="bold">Class {profile?.class || '12'}</AppText>
-                        </View>
-                        <AppText style={styles.subInfo}>  •  {profile?.board || 'Board'} Board • {profile?.stream?.split(' ')[0] || 'Science'}</AppText>
+                    <View style={styles.classInfo}>
+                        <AppText style={styles.classText} weight="bold">Class {profile?.class}</AppText>
+                        <View style={styles.dot} />
+                        <AppText style={styles.boardText}>{profile?.board} Board</AppText>
                     </View>
                 </View>
 
-                {/* Stats Row */}
+                {/* Achievement Stats Row */}
                 <View style={styles.statsRow}>
-                    {stats.map((stat, index) => (
-                        <View key={index} style={styles.statCard}>
-                            <MaterialCommunityIcons name={stat.icon} size={28} color="rgba(255,255,255,0.05)" style={styles.statIconBg} />
-                            <AppText style={styles.statValue} weight="bold">{stat.value}</AppText>
-                            <AppText style={styles.statLabel}>{stat.label}</AppText>
+                    <LinearGradient
+                        colors={['#1E293B', '#111827']}
+                        style={styles.statCard}
+                    >
+                        <View style={styles.statIconBox}>
+                            <Ionicons name="documents" size={20} color="#00B1FC" />
                         </View>
-                    ))}
+                        <AppText style={styles.statValue} weight="bold">{profile?.stats?.notesPurchased || 0}</AppText>
+                        <AppText style={styles.statLabel}>Purchased</AppText>
+                    </LinearGradient>
+
+                    <LinearGradient
+                        colors={['#1E293B', '#111827']}
+                        style={styles.statCard}
+                    >
+                        <View style={[styles.statIconBox, { backgroundColor: '#10B98115' }]}>
+                            <Ionicons name="time" size={20} color="#10B981" />
+                        </View>
+                        <AppText style={styles.statValue} weight="bold">{formatRealTime(profile?.stats?.hoursStudied || 0, sessionSeconds)}</AppText>
+                        <AppText style={styles.statLabel}>Studied</AppText>
+                    </LinearGradient>
+
+                    <LinearGradient
+                        colors={['#1E293B', '#111827']}
+                        style={styles.statCard}
+                    >
+                        <View style={[styles.statIconBox, { backgroundColor: '#F59E0B15' }]}>
+                            <Ionicons name="ribbon" size={20} color="#F59E0B" />
+                        </View>
+                        <AppText style={styles.statValue} weight="bold">{profile?.stats?.subjectsCovered || 0}</AppText>
+                        <AppText style={styles.statLabel}>Targets</AppText>
+                    </LinearGradient>
                 </View>
 
-                {/* Menu List */}
-                <View style={styles.menuContainer}>
-                    {menuItems.map((item, index) => (
-                        <TouchableOpacity
-                            key={index}
-                            style={[styles.menuItem, index === menuItems.length - 1 && { borderBottomWidth: 0 }]}
-                            onPress={() => item.screen && navigation.navigate(item.screen)}
-                        >
-                            <View style={styles.menuItemLeft}>
-                                <View style={styles.menuIconContainer}>
-                                    <MaterialCommunityIcons name={item.icon} size={20} color="white" />
-                                </View>
-                                <AppText style={styles.menuText} weight="medium">{item.title}</AppText>
-                            </View>
-                            <Ionicons name="chevron-forward" size={18} color="#4B5563" />
-                        </TouchableOpacity>
-                    ))}
+                {/* Learning Streak Banner (Hypothetical) */}
+                <View style={styles.streakBanner}>
+                    <View style={styles.streakIcon}>
+                        <MaterialCommunityIcons name="fire" size={20} color="#EF4444" />
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                        <AppText style={styles.streakTitle} weight="bold">3 Day Learning Streak!</AppText>
+                        <View style={styles.streakProgressBg}>
+                            <View style={[styles.streakProgressFill, { width: '40%' }]} />
+                        </View>
+                    </View>
                 </View>
 
-                {/* Recent Activity */}
-                <View style={styles.sectionHeader}>
-                    <AppText style={styles.sectionTitle} weight="bold">Recent Activity</AppText>
-                    <TouchableOpacity onPress={() => navigation.navigate('MyLibrary')}>
-                        <AppText style={styles.viewAll}>VIEW ALL</AppText>
-                    </TouchableOpacity>
-                </View>
-
-                {profile?.recentActivity?.length > 0 ? (
-                    profile.recentActivity.map((activity, index) => (
-                        <TouchableOpacity key={index} style={styles.activityCard}>
-                            <View style={styles.activityLeft}>
-                                <Image
-                                    source={activity.thumbnail ? { uri: activity.thumbnail } : require('../../../assets/topper.avif')}
-                                    style={styles.activityThumb}
-                                />
-                                <View style={styles.activityInfo}>
-                                    <AppText style={styles.activityTitle} weight="bold">{activity.title}</AppText>
-                                    <View style={styles.activityMeta}>
-                                        <AppText style={styles.activityDate}>
-                                            Purchased {new Date(activity.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                                        </AppText>
-                                        <View style={styles.verifiedBadge}>
-                                            <AppText style={styles.verifiedText}>Verified</AppText>
-                                        </View>
+                {/* Settings Menu Sections */}
+                {sections.map((section, idx) => (
+                    <View key={idx} style={styles.menuSection}>
+                        <AppText style={styles.sectionLabel} weight="bold">{section.title}</AppText>
+                        <View style={styles.menuGroup}>
+                            {section.items.map((item, iIdx) => (
+                                <TouchableOpacity
+                                    key={iIdx}
+                                    style={[styles.menuItem, iIdx === section.items.length - 1 && { borderBottomWidth: 0 }]}
+                                    onPress={() => item.screen && navigation.navigate(item.screen, item.params)}
+                                >
+                                    <View style={[styles.menuIconBox, { backgroundColor: `${item.color}15` }]}>
+                                        <Ionicons name={item.icon} size={20} color={item.color} />
                                     </View>
-                                </View>
-                            </View>
-                            <TouchableOpacity style={styles.downloadBtn}>
-                                <Feather name="download" size={16} color="#3B82F6" />
-                            </TouchableOpacity>
-                        </TouchableOpacity>
-                    ))
-                ) : (
-                    <NoDataFound
-                        message="No recent activity found."
-                        containerStyle={{ marginTop: 20 }}
-                    />
-                )}
+                                    <AppText style={styles.menuLabel} weight="medium">{item.title}</AppText>
+                                    <Feather name="chevron-right" size={18} color="#475569" />
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </View>
+                ))}
+
+                {/* App Links */}
+                <TouchableOpacity style={styles.dangerBtn} onPress={handleLogout}>
+                    <AppText style={styles.dangerText} weight="bold">Log out from account</AppText>
+                </TouchableOpacity>
+
+                <View style={styles.footer}>
+                    <AppText style={styles.version}>TopperNotes Student v1.0.8</AppText>
+                    <View style={styles.dotRow}>
+                        <TouchableOpacity><AppText style={styles.footerLink}>Support</AppText></TouchableOpacity>
+                        <View style={styles.smallDot} />
+                        <TouchableOpacity><AppText style={styles.footerLink}>Terms</AppText></TouchableOpacity>
+                        <View style={styles.smallDot} />
+                        <TouchableOpacity><AppText style={styles.footerLink}>Privacy</AppText></TouchableOpacity>
+                    </View>
+                </View>
+
             </ScrollView>
             <Loader visible={isUpdatingPhoto} />
         </View>
@@ -245,279 +256,238 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#0F172A',
-        paddingTop: 50,
-    },
-    scrollContent: {
-        paddingBottom: 120,
     },
     header: {
+        flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: Theme.layout.screenPadding,
-        marginBottom: 30,
+        justifyContent: 'space-between',
+        paddingHorizontal: 20,
+        paddingTop: 60,
+        paddingBottom: 20,
     },
-    settingsBtn: {
-        alignSelf: 'flex-end',
-        padding: 5,
+    backBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#1E293B',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
-    profileImageContainer: {
+    headerTitle: {
+        fontSize: 18,
+        color: 'white',
+    },
+    logoutBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#EF444415',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    scrollContent: {
+        paddingBottom: 60,
+    },
+    heroSection: {
+        alignItems: 'center',
+        marginVertical: 20,
+    },
+    avatarWrapper: {
         position: 'relative',
         marginBottom: 15,
-        marginTop: -10,
     },
-    profileImage: {
-        width: 110,
-        height: 110,
-        borderRadius: 55,
+    avatar: {
+        width: 100,
+        height: 100,
+        borderRadius: 50,
         borderWidth: 3,
         borderColor: '#1E293B',
     },
-    editBtn: {
+    editBadge: {
         position: 'absolute',
-        bottom: 5,
-        right: 5,
-        backgroundColor: '#3B82F6',
+        bottom: 2,
+        right: 2,
+        backgroundColor: '#00B1FC',
         width: 28,
         height: 28,
         borderRadius: 14,
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 2,
+        borderWidth: 3,
         borderColor: '#0F172A',
     },
     userName: {
         fontSize: 24,
         color: 'white',
-        marginBottom: 8,
+        marginBottom: 6,
     },
-    badgeRow: {
+    classInfo: {
         flexDirection: 'row',
         alignItems: 'center',
-    },
-    classBadge: {
-        backgroundColor: 'rgba(59, 130, 246, 0.2)',
-        paddingHorizontal: 12,
-        paddingVertical: 4,
-        borderRadius: 8,
+        backgroundColor: '#1E293B',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
         borderWidth: 1,
-        borderColor: 'rgba(59, 130, 246, 0.3)',
+        borderColor: '#334155',
     },
-    badgeText: {
-        color: '#60A5FA',
-        fontSize: 12,
+    classText: {
+        color: '#00B1FC',
+        fontSize: 13,
     },
-    subInfo: {
+    dot: {
+        width: 4,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: '#475569',
+        marginHorizontal: 10,
+    },
+    boardText: {
         color: '#94A3B8',
         fontSize: 13,
     },
     statsRow: {
         flexDirection: 'row',
+        paddingHorizontal: 20,
         justifyContent: 'space-between',
-        paddingHorizontal: Theme.layout.screenPadding,
-        marginBottom: 30,
-        gap: 10
+        marginVertical: 25,
     },
     statCard: {
-        width: (width - (Theme.layout.screenPadding * 2 + 20)) / 3,
-        backgroundColor: '#1E293B',
-        height: 100,
-        borderRadius: 16,
-        padding: 12,
-        justifyContent: 'center',
-        position: 'relative',
-        overflow: 'hidden',
+        width: (width - 60) / 3,
+        padding: 15,
+        borderRadius: 22,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#33415550',
     },
-    statIconBg: {
-        position: 'absolute',
-        top: 10,
-        right: 5,
+    statIconBox: {
+        width: 36,
+        height: 36,
+        borderRadius: 12,
+        backgroundColor: '#00B1FC15',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 10,
     },
     statValue: {
-        fontSize: 22,
+        fontSize: 18,
         color: 'white',
-        marginTop: 20,
     },
     statLabel: {
-        width: '100%',
-        fontSize: 9,
-        color: '#94A3B8',
-        lineHeight: 12,
+        fontSize: 10,
+        color: '#64748B',
+        marginTop: 2,
     },
-    menuContainer: {
-        backgroundColor: '#1E293B',
-        marginHorizontal: Theme.layout.screenPadding,
+    streakBanner: {
+        marginHorizontal: 20,
+        backgroundColor: '#EF444410',
+        padding: 16,
         borderRadius: 20,
-        paddingVertical: 5,
-        marginBottom: 35,
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#EF444420',
+        marginBottom: 30,
+    },
+    streakIcon: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: '#EF444420',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    streakTitle: {
+        fontSize: 14,
+        color: 'white',
+        marginBottom: 8,
+    },
+    streakProgressBg: {
+        height: 4,
+        backgroundColor: '#EF444420',
+        borderRadius: 2,
+        overflow: 'hidden',
+    },
+    streakProgressFill: {
+        height: '100%',
+        backgroundColor: '#EF4444',
+    },
+    menuSection: {
+        marginBottom: 30,
+    },
+    sectionLabel: {
+        fontSize: 12,
+        color: '#475569',
+        textTransform: 'uppercase',
+        letterSpacing: 1.5,
+        marginLeft: 24,
+        marginBottom: 12,
+    },
+    menuGroup: {
+        backgroundColor: '#1E293B',
+        marginHorizontal: 20,
+        borderRadius: 24,
+        borderWidth: 1,
+        borderColor: '#334155',
+        overflow: 'hidden',
     },
     menuItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingVertical: 18,
-        paddingHorizontal: 20,
+        padding: 16,
         borderBottomWidth: 1,
-        borderBottomColor: 'rgba(255,255,255,0.05)',
+        borderBottomColor: '#33415540',
     },
-    menuItemLeft: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    menuIconContainer: {
-        width: 36,
-        height: 36,
-        borderRadius: 10,
-        backgroundColor: 'rgba(255,255,255,0.05)',
+    menuIconBox: {
+        width: 38,
+        height: 38,
+        borderRadius: 12,
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 15,
+        marginRight: 16,
     },
-    menuText: {
+    menuLabel: {
+        flex: 1,
+        fontSize: 15,
         color: 'white',
+    },
+    dangerBtn: {
+        marginHorizontal: 20,
+        paddingVertical: 18,
+        borderRadius: 22,
+        backgroundColor: '#EF444410',
+        borderWidth: 1,
+        borderColor: '#EF444430',
+        alignItems: 'center',
+        marginTop: 10,
+        marginBottom: 35,
+    },
+    dangerText: {
+        color: '#EF4444',
         fontSize: 15,
     },
-    sectionHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: Theme.layout.screenPadding,
-        marginBottom: 20,
-    },
-    sectionTitle: {
-        color: 'white',
-        fontSize: 18,
-    },
-    viewAll: {
-        color: '#3B82F6',
-        fontSize: 12,
-        letterSpacing: 0.5,
-    },
-    activityCard: {
-        backgroundColor: '#1E293B',
-        marginHorizontal: Theme.layout.screenPadding,
-        borderRadius: 16,
-        padding: 15,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 12,
-    },
-    activityLeft: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flex: 1,
-    },
-    activityThumb: {
-        width: 50,
-        height: 50,
-        borderRadius: 10,
-        marginRight: 15,
-        backgroundColor: '#334155',
-    },
-    activityInfo: {
-        flex: 1,
-    },
-    activityTitle: {
-        color: 'white',
-        fontSize: 14,
-        marginBottom: 4,
-    },
-    activityMeta: {
-        flexDirection: 'row',
+    footer: {
         alignItems: 'center',
     },
-    activityDate: {
-        color: '#94A3B8',
+    version: {
         fontSize: 11,
-        marginRight: 8,
+        color: '#475569',
+        marginBottom: 10,
     },
-    verifiedBadge: {
-        backgroundColor: 'rgba(16, 185, 129, 0.1)',
-        paddingHorizontal: 8,
-        paddingVertical: 2,
-        borderRadius: 4,
-    },
-    verifiedText: {
-        color: '#10B981',
-        fontSize: 9,
-        fontWeight: 'bold',
-    },
-    downloadBtn: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    toppersList: {
-        paddingVertical: 10,
-        paddingLeft: Theme.layout.screenPadding,
-        gap: 15,
-    },
-    topperCard: {
-        alignItems: 'center',
-        backgroundColor: '#1E293B',
-        padding: 12,
-        borderRadius: 20,
-        width: 100,
-        borderWidth: 1,
-        borderColor: '#334155',
-    },
-    topperAvatarContainer: {
-        position: 'relative',
-        marginBottom: 8,
-    },
-    topperAvatar: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        borderWidth: 2,
-        borderColor: '#3B82F6',
-    },
-    topperStatusDot: {
-        position: 'absolute',
-        bottom: 2,
-        right: 2,
-        width: 12,
-        height: 12,
-        borderRadius: 6,
-        backgroundColor: '#10B981',
-        borderWidth: 2,
-        borderColor: '#1E293B',
-    },
-    topperName: {
-        color: 'white',
-        fontSize: 12,
-        marginBottom: 4,
-    },
-    topperRankBadge: {
+    dotRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'rgba(255, 215, 0, 0.1)',
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 6,
-        gap: 3,
+        gap: 12,
     },
-    topperRankText: {
-        color: '#FFD700',
-        fontSize: 8,
-        fontWeight: 'bold',
+    footerLink: {
+        fontSize: 12,
+        color: '#00B1FC',
     },
-    noFollowingContainer: {
-        backgroundColor: 'rgba(255,255,255,0.03)',
-        marginHorizontal: Theme.layout.screenPadding,
-        borderRadius: 16,
-        padding: 20,
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.05)',
-        marginBottom: 35,
-        borderStyle: 'dashed',
-    },
-    noFollowingText: {
-        color: '#64748B',
-        fontSize: 13,
+    smallDot: {
+        width: 3,
+        height: 3,
+        borderRadius: 1.5,
+        backgroundColor: '#334155',
     }
 });
 

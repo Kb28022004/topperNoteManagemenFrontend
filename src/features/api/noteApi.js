@@ -80,20 +80,95 @@ export const noteApi = createApi({
       invalidatesTags: ["Notes"],
     }),
     getMyNotes: builder.query({
-      query: () => "/notes/me",
+      query: (params) => ({
+        url: "/notes/me",
+        params: {
+          search:  params?.search  || undefined,
+          status:  params?.status  || undefined,
+          sortBy:  params?.sortBy  || 'newest',
+          sold:    params?.sold    || undefined,
+          page:    params?.page    || 1,
+          limit:   params?.limit   || 10,
+        },
+      }),
+      serializeQueryArgs: ({ endpointName, queryArgs }) => {
+        const { page, limit, ...rest } = queryArgs || {};
+        return { endpointName, ...rest };
+      },
+      merge: (currentCache, newResponse, { arg }) => {
+        if (!arg?.page || arg.page === 1 || !currentCache) return newResponse;
+        const existingMap = new Map(
+          currentCache.notes.map(n => [n._id, n])
+        );
+        newResponse.notes.forEach(n => existingMap.set(n._id, n));
+        return {
+          ...newResponse,
+          notes: Array.from(existingMap.values()),
+        };
+      },
+      forceRefetch({ currentArg, previousArg }) {
+        return currentArg !== previousArg;
+      },
+      transformResponse: (response) => ({
+        notes:      response.data?.notes      ?? [],
+        pagination: response.data?.pagination ?? {},
+      }),
+      providesTags: ['Notes'],
+    }),
+    getMySalesDetails: builder.query({
+      query: (params) => ({
+        url: '/notes/me/sales',
+        params: {
+          search: params?.search || undefined,
+          page:   params?.page   || 1,
+          limit:  params?.limit  || 10,
+        },
+      }),
+      serializeQueryArgs: ({ endpointName, queryArgs }) => {
+        const { page, limit, ...rest } = queryArgs || {};
+        return { endpointName, ...rest };
+      },
+      merge: (currentCache, newResponse, { arg }) => {
+        if (!arg?.page || arg.page === 1 || !currentCache) return newResponse;
+        const existingMap = new Map(
+          currentCache.notes.map(n => [(n.noteId || n._id)?.toString(), n])
+        );
+        newResponse.notes.forEach(n => existingMap.set((n.noteId || n._id)?.toString(), n));
+        return { ...newResponse, notes: Array.from(existingMap.values()) };
+      },
+      forceRefetch({ currentArg, previousArg }) {
+        return currentArg !== previousArg;
+      },
       transformResponse: (response) => response.data,
-      providesTags: ["Notes"],
+      providesTags: ['Notes'],
     }),
     getPurchasedNotes: builder.query({
       query: (params) => ({
         url: "/notes/purchased/me",
         params: {
-          search: params?.search,
+          search: params?.search || undefined,
           page: params?.page || 1,
           limit: params?.limit || 10
         }
       }),
-      transformResponse: (response) => response.data,
+      // Accumulate pages in a single cache entry per search query
+      serializeQueryArgs: ({ endpointName, queryArgs }) => {
+        const { page, limit, ...rest } = queryArgs || {};
+        return { endpointName, ...rest };
+      },
+      merge: (currentCache, newResponse, { arg }) => {
+        if (!arg?.page || arg.page === 1 || !currentCache) return newResponse;
+        const existingMap = new Map(currentCache.notes.map(n => [n._id || n.id, n]));
+        newResponse.notes.forEach(n => existingMap.set(n._id || n.id, n));
+        return { ...newResponse, notes: Array.from(existingMap.values()) };
+      },
+      forceRefetch({ currentArg, previousArg }) {
+        return currentArg !== previousArg;
+      },
+      transformResponse: (response) => ({
+        notes: response.data || [],
+        pagination: response.pagination || {}
+      }),
       providesTags: ["Notes"],
     }),
     addReview: builder.mutation({
@@ -105,6 +180,87 @@ export const noteApi = createApi({
       invalidatesTags: (result, error, { noteId }) => [
         { type: "Notes", id: noteId },
         { type: "Notes", id: "LIST" },
+        { type: "Notes", id: `${noteId}-REVIEWS` },
+      ],
+    }),
+    getNoteBuyers: builder.query({
+      query: (noteId) => `/notes/${noteId}/buyers`,
+      transformResponse: (response) => response.data,
+      providesTags: (result, error, id) => [{ type: "Notes", id: `${id}-BUYERS` }],
+    }),
+    getNoteReviews: builder.query({
+      query: (noteId) => `/reviews/${noteId}`,
+      transformResponse: (response) => response.data,
+      providesTags: (result, error, id) => [{ type: "Notes", id: `${id}-REVIEWS` }],
+    }),
+    getTopperReviews: builder.query({
+      query: ({ topperId, ...params }) => ({
+        url: `/reviews/topper/${topperId}`,
+        params: {
+          page:   params?.page || 1,
+          limit:  params?.limit || 10,
+          search: params?.search || undefined,
+          sortBy: params?.sortBy || 'newest',
+          rating: params?.rating || undefined
+        },
+      }),
+      serializeQueryArgs: ({ endpointName, queryArgs }) => {
+        const { page, limit, ...rest } = queryArgs || {};
+        return { endpointName, ...rest };
+      },
+      merge: (currentCache, newResponse, { arg }) => {
+        if (!arg?.page || arg.page === 1 || !currentCache) return newResponse;
+        const existingMap = new Map(
+          currentCache.reviews.map(r => [r.id || r._id, r])
+        );
+        newResponse.reviews.forEach(r => existingMap.set(r.id || r._id, r));
+        return {
+          ...newResponse,
+          reviews: Array.from(existingMap.values()),
+        };
+      },
+      forceRefetch({ currentArg, previousArg }) {
+        return currentArg !== previousArg;
+      },
+      transformResponse: (response) => response.data,
+      providesTags: (result, error, { topperId }) => [{ type: 'Notes', id: `TOPPER-${topperId}-REVIEWS` }],
+    }),
+    getFavoriteNotes: builder.query({
+      query: (params) => ({
+        url: "/notes/favorites/me",
+        params: {
+          search: params?.search || undefined,
+          page: params?.page || 1,
+          limit: params?.limit || 10
+        }
+      }),
+      serializeQueryArgs: ({ endpointName, queryArgs }) => {
+        const { page, limit, ...rest } = queryArgs || {};
+        return { endpointName, ...rest };
+      },
+      merge: (currentCache, newResponse, { arg }) => {
+        if (!arg?.page || arg.page === 1 || !currentCache) return newResponse;
+        const existingMap = new Map(currentCache.notes.map(n => [n._id || n.id, n]));
+        newResponse.notes.forEach(n => existingMap.set(n._id || n.id, n));
+        return { ...newResponse, notes: Array.from(existingMap.values()) };
+      },
+      forceRefetch({ currentArg, previousArg }) {
+        return currentArg !== previousArg;
+      },
+      transformResponse: (response) => ({
+        notes: response.data || [],
+        pagination: response.pagination || {}
+      }),
+      providesTags: ["Notes"],
+    }),
+    toggleFavoriteNote: builder.mutation({
+      query: (noteId) => ({
+        url: `/notes/${noteId}/favorite`,
+        method: "PATCH",
+      }),
+      invalidatesTags: (result, error, noteId) => [
+        { type: "Notes", id: noteId },
+        { type: "Notes", id: "FAVORITES" }
       ],
     }),
   }),
@@ -115,6 +271,12 @@ export const {
   useGetNoteDetailsQuery,
   useUploadNoteMutation,
   useGetMyNotesQuery,
+  useGetMySalesDetailsQuery,
   useGetPurchasedNotesQuery,
-  useAddReviewMutation
+  useAddReviewMutation,
+  useGetNoteBuyersQuery,
+  useGetNoteReviewsQuery,
+  useGetTopperReviewsQuery,
+  useGetFavoriteNotesQuery,
+  useToggleFavoriteNoteMutation
 } = noteApi;

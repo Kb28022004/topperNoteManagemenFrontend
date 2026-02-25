@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
     View,
     StyleSheet,
@@ -8,46 +8,50 @@ import {
     FlatList,
     Dimensions,
     ActivityIndicator,
-    RefreshControl
+    RefreshControl,
+    StatusBar,
 } from 'react-native';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import AppText from '../../components/AppText';
+import NoteStrip from '../../components/topper/NoteStrip';
 import { useGetProfileQuery } from '../../features/api/topperApi';
-import { useGetMyNotesQuery } from '../../features/api/noteApi';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useGetMyNotesQuery, useGetMySalesDetailsQuery } from '../../features/api/noteApi';
 import { useAlert } from '../../context/AlertContext';
-import NoDataFound from '../../components/NoDataFound';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
 
 const TopperHome = ({ navigation }) => {
     const { showAlert } = useAlert();
     const { data: profile, refetch: refetchProfile } = useGetProfileQuery();
-    const { data: notesData, isLoading, refetch: refetchNotes } = useGetMyNotesQuery();
+    const { data: notesData, isLoading, refetch: refetchNotes } = useGetMyNotesQuery({ sortBy: 'newest', page: 1, limit: 4 });
+    const { data: salesData, isFetching: salesFetching, refetch: refetchSales } = useGetMySalesDetailsQuery({ page: 1, limit: 4 });
     const [refreshing, setRefreshing] = useState(false);
 
     useFocusEffect(
         useCallback(() => {
             refetchProfile?.();
             refetchNotes?.();
-        }, [refetchProfile, refetchNotes])
+            refetchSales?.();
+        }, [refetchProfile, refetchNotes, refetchSales])
     );
 
     const onRefresh = React.useCallback(async () => {
         setRefreshing(true);
         try {
             await Promise.all([
-                refetchProfile?.().unwrap(),
-                refetchNotes?.().unwrap()
+                refetchProfile?.(),
+                refetchNotes?.(),
+                refetchSales?.(),
             ]);
         } catch (err) {
-            console.log("Refresh Error:", err);
+            console.log('Refresh Error:', err);
         } finally {
             setRefreshing(false);
         }
-    }, [refetchProfile, refetchNotes]);
+    }, [refetchProfile, refetchNotes, refetchSales]);
 
     const handleLogout = () => {
         showAlert(
@@ -68,83 +72,65 @@ const TopperHome = ({ navigation }) => {
         );
     };
 
-    const topperStats = profile?.data?.stats;
-
     const stats = [
         {
-            label: 'Total Earnings',
-            value: `₹${topperStats?.totalEarnings || 0}`,
-            icon: 'cash-outline',
-            color: '#10B981'
+            label: 'Total Sales',
+            value: salesData?.summary?.totalSales || 0,
+            icon: 'cart-outline',
+            color: '#10B981',
+            bg: 'rgba(16, 185, 129, 0.1)',
         },
         {
-            label: 'Notes Sold',
-            value: `${topperStats?.totalSold || 0}`,
-            icon: 'book-outline',
-            color: '#00B1FC'
+            label: 'Revenue',
+            value: `₹${salesData?.summary?.totalRevenue || 0}`,
+            icon: 'wallet-outline',
+            color: '#00B1FC',
+            bg: 'rgba(0, 177, 252, 0.1)',
         },
         {
-            label: 'Avg Rating',
-            value: `${topperStats?.rating?.average || '0.0'}`,
+            label: 'Followers',
+            value: profile?.data?.stats?.followersCount || 0,
+            icon: 'people-outline',
+            color: '#A855F7',
+            bg: 'rgba(168, 85, 247, 0.1)',
+        },
+        {
+            label: 'Rating',
+            value: profile?.data?.stats?.rating?.average || '0.0',
             icon: 'star-outline',
-            color: '#F59E0B'
-        },
-        {
-            label: 'Total Uploads',
-            value: `${topperStats?.totalNotes || 0}`,
-            icon: 'document-text-outline',
-            color: '#A855F7'
+            color: '#F59E0B',
+            bg: 'rgba(245, 158, 11, 0.1)',
         },
     ];
 
-    const renderNoteCard = ({ item }) => (
-        <View style={styles.noteCard}>
-            <View style={[styles.noteStatusBadge, {
-                backgroundColor: item.status === 'PUBLISHED' ? 'rgba(16, 185, 129, 0.2)' :
-                    item.status === 'REJECTED' ? 'rgba(239, 68, 68, 0.2)' :
-                        'rgba(245, 158, 11, 0.2)'
-            }]}>
-                <AppText style={[styles.statusText, {
-                    color: item.status === 'PUBLISHED' ? '#10B981' :
-                        item.status === 'REJECTED' ? '#EF4444' :
-                            '#F59E0B'
-                }]}>
-                    {item.status === 'PUBLISHED' ? 'Approved' :
-                        item.status === 'REJECTED' ? 'Rejected' :
-                            'Pending'}
-                </AppText>
-            </View>
-            <View style={styles.noteDetails}>
-                <AppText style={styles.noteTitle} numberOfLines={1}>{item.subject} - {item.chapterName}</AppText>
-                <AppText style={styles.noteSub}>{item.class} • {item.board}</AppText>
-                <View style={styles.priceRow}>
-                    <AppText style={styles.price}>₹{item.price}</AppText>
-                    <AppText style={styles.sales}>{item.salesCount || 0} Sales</AppText>
-                </View>
-            </View>
-        </View>
-    );
+    const today = useMemo(() => {
+        const options = { weekday: 'long', day: 'numeric', month: 'short' };
+        return new Date().toLocaleDateString('en-US', options);
+    }, []);
+
+    const greeting = useMemo(() => {
+        const hour = new Date().getHours();
+        if (hour < 12) return 'Good Morning';
+        if (hour < 18) return 'Good Afternoon';
+        return 'Good Evening';
+    }, []);
 
     return (
         <View style={styles.container}>
-            {/* Header */}
+            <StatusBar barStyle="light-content" />
+
+            {/* Custom Header */}
             <View style={styles.header}>
-                <View style={styles.profileSection}>
-                    <Image
-                        source={profile?.data?.profilePhoto ? { uri: profile.data.profilePhoto } : require('../../../assets/topper.avif')}
-                        style={styles.avatar}
-                    />
-                    <View style={styles.welcomeTextContainer}>
-                        <AppText style={styles.welcomeBack}>Topper Dashboard</AppText>
-                        <AppText style={styles.userName} weight="bold">{profile?.data?.fullName || 'Topper'}</AppText>
-                    </View>
+                <View style={styles.headerLeft}>
+                    <AppText style={styles.dateText}>{today}</AppText>
+                    <AppText style={styles.greetingText} weight="bold">{greeting}, {profile?.data?.firstName || 'Topper'}</AppText>
                 </View>
-                <View style={styles.headerActions}>
-                    <TouchableOpacity style={styles.notificationBtn}>
-                        <Feather name="bell" size={20} color="white" />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.notificationBtn, { marginLeft: 10 }]} onPress={handleLogout}>
-                        <Feather name="log-out" size={20} color="#EF4444" />
+                <View style={styles.headerRight}>
+                    <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('TopperProfile')}>
+                        <Image
+                            source={profile?.data?.profilePhoto ? { uri: profile.data.profilePhoto } : require('../../../assets/topper.avif')}
+                            style={styles.avatar}
+                        />
                     </TouchableOpacity>
                 </View>
             </View>
@@ -162,64 +148,110 @@ const TopperHome = ({ navigation }) => {
                     />
                 }
             >
-                {/* Stats Grid */}
+                {/* Search / Announcement Banner */}
+                <TouchableOpacity style={styles.bannerContainer} activeOpacity={0.9}>
+                    <LinearGradient
+                        colors={['#1E293B', '#111827']}
+                        style={styles.banner}
+                    >
+                        <View style={styles.bannerContent}>
+                            <View style={styles.badge}>
+                                <AppText style={styles.badgeText}>COMMUNITY TIP</AppText>
+                            </View>
+                            <AppText style={styles.bannerTitle} weight="bold">Boost your sales by 30%</AppText>
+                            <AppText style={styles.bannerDesc}>Add samples and detailed descriptions to your notes.</AppText>
+                        </View>
+                        <MaterialCommunityIcons name="rocket-launch-outline" size={40} color="#00B1FC" style={styles.bannerIcon} />
+                    </LinearGradient>
+                </TouchableOpacity>
+
+                {/* Stats Section */}
+                <View style={styles.sectionHeader}>
+                    <AppText style={styles.sectionTitle} weight="bold">Account Overview</AppText>
+                    <View style={styles.liveIndicator}>
+                        <View style={styles.liveDot} />
+                        <AppText style={styles.liveText}>LIVE</AppText>
+                    </View>
+                </View>
+
                 <View style={styles.statsGrid}>
                     {stats.map((stat, index) => (
                         <View key={index} style={styles.statCard}>
-                            <View style={[styles.statIconBox, { backgroundColor: `${stat.color}20` }]}>
+                            <View style={[styles.statIconBox, { backgroundColor: stat.bg }]}>
                                 <Ionicons name={stat.icon} size={20} color={stat.color} />
                             </View>
-                            <AppText style={styles.statValue} weight="bold">{stat.value}</AppText>
-                            <AppText style={styles.statLabel}>{stat.label}</AppText>
+                            <View>
+                                <AppText style={styles.statValue} weight="bold">{stat.value}</AppText>
+                                <AppText style={styles.statLabel}>{stat.label}</AppText>
+                            </View>
                         </View>
                     ))}
                 </View>
 
-                {/* Quick Actions */}
-                <AppText style={styles.sectionTitle} weight="bold">Quick Actions</AppText>
+                {/* Performance Tip Card */}
+                <View style={[styles.performanceCard, { marginTop: 10 }]}>
+                    <View style={styles.row}>
+                        <View style={styles.perfIconBox}>
+                            <Feather name="trending-up" size={20} color="#10B981" />
+                        </View>
+                        <View style={{ flex: 1, marginLeft: 12 }}>
+                            <AppText style={styles.perfTitle} weight="bold">Top Performing Subjects</AppText>
+                            <AppText style={styles.perfDesc}>Mathematics and Physics notes are currently trending in Class 12.</AppText>
+                        </View>
+                    </View>
+                </View>
+
+                {/* Upload Action */}
                 <TouchableOpacity
-                    style={styles.uploadCard}
+                    style={styles.actionCard}
                     onPress={() => navigation.navigate('UploadNotes')}
                 >
                     <LinearGradient
-                        colors={['#00B1FC', '#007BB5']}
-                        style={styles.uploadGradient}
+                        colors={['#00B1FC', '#007FFF']}
+                        start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                        style={styles.actionGradient}
                     >
-                        <View style={styles.uploadInfo}>
-                            <AppText style={styles.uploadTitle} weight="bold">Upload New Notes</AppText>
-                            <AppText style={styles.uploadSubtitle}>Share your knowledge & earn</AppText>
+                        <View>
+                            <AppText style={styles.actionTitle} weight="bold">Upload New Content</AppText>
+                            <AppText style={styles.actionSubtitle}>Start earning by sharing your expertise</AppText>
                         </View>
-                        <View style={styles.uploadIconCircle}>
-                            <Ionicons name="add" size={30} color="#00B1FC" />
+                        <View style={styles.addIconCircle}>
+                            <Ionicons name="add" size={24} color="#00B1FC" />
                         </View>
                     </LinearGradient>
                 </TouchableOpacity>
 
-                {/* My Uploads */}
-                <View style={styles.sectionHeader}>
-                    <AppText style={styles.sectionTitle} weight="bold">My Recent Uploads</AppText>
-                    <TouchableOpacity>
-                        <AppText style={styles.seeAll}>See all</AppText>
-                    </TouchableOpacity>
+                {/* Recent Uploads */}
+                <NoteStrip
+                    title="Recent Content"
+                    notes={notesData?.notes || []}
+                    isLoading={isLoading}
+                    onSeeAll={() => navigation.navigate('MyUploads')}
+                    emptyMessage="You haven't uploaded anything yet."
+                />
+
+                {/* Top Sales */}
+                <NoteStrip
+                    title="Top Sellers"
+                    notes={salesData?.notes || []}
+                    isLoading={salesFetching}
+                    onSeeAll={() => navigation.navigate('MySoldNotes')}
+                    emptyMessage="No sales recorded yet."
+                    accentColor="#10B981"
+                />
+
+                {/* Weekly Goal (Placeholder for gamification) */}
+                <View style={styles.goalCard}>
+                    <View style={styles.goalHeader}>
+                        <AppText style={styles.goalTitle} weight="bold">Weekly Sales Goal</AppText>
+                        <AppText style={styles.goalPercent}>60%</AppText>
+                    </View>
+                    <View style={styles.progressBarBg}>
+                        <View style={[styles.progressBarFill, { width: '60%' }]} />
+                    </View>
+                    <AppText style={styles.goalDesc}>Sell 4 more notes this week to unlock "Pro Seller" badge!</AppText>
                 </View>
 
-                {isLoading ? (
-                    <ActivityIndicator color="#00B1FC" />
-                ) : (
-                    <FlatList
-                        data={notesData?.slice(0, 5) || []}
-                        renderItem={renderNoteCard}
-                        keyExtractor={item => item._id}
-                        scrollEnabled={false}
-                        ListEmptyComponent={
-                            <NoDataFound
-                                message="No notes uploaded yet. Start sharing your knowledge!"
-                                icon="document-text-outline"
-                                containerStyle={{ paddingVertical: 30 }}
-                            />
-                        }
-                    />
-                )}
             </ScrollView>
         </View>
     );
@@ -229,188 +261,241 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#0F172A',
-        paddingTop: 50,
     },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 20,
-        marginBottom: 25,
+        paddingTop: 60,
+        paddingBottom: 20,
     },
-    profileSection: {
-        flexDirection: 'row',
-        alignItems: 'center',
+    dateText: {
+        fontSize: 12,
+        color: '#64748B',
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+    },
+    greetingText: {
+        fontSize: 20,
+        color: 'white',
+        marginTop: 2,
     },
     avatar: {
-        width: 45,
-        height: 45,
-        borderRadius: 25,
+        width: 44,
+        height: 44,
+        borderRadius: 22,
         borderWidth: 2,
-        borderColor: '#00B1FC',
-    },
-    welcomeTextContainer: {
-        marginLeft: 12,
-    },
-    welcomeBack: {
-        fontSize: 12,
-        color: '#94A3B8',
-    },
-    userName: {
-        fontSize: 16,
-        color: 'white',
-    },
-    headerActions: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    notificationBtn: {
-        width: 45,
-        height: 45,
-        borderRadius: 25,
-        backgroundColor: '#1E293B',
-        justifyContent: 'center',
-        alignItems: 'center',
+        borderColor: '#1E293B',
     },
     scrollContent: {
-        paddingHorizontal: 20,
         paddingBottom: 40,
     },
-    statsGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        justifyContent: 'space-between',
-        marginBottom: 20,
+    bannerContainer: {
+        marginHorizontal: 20,
+        marginBottom: 25,
     },
-    statCard: {
-        width: '48%',
-        backgroundColor: '#1E293B',
-        borderRadius: 16,
-        padding: 15,
+    banner: {
+        borderRadius: 24,
+        padding: 20,
+        flexDirection: 'row',
         alignItems: 'center',
         borderWidth: 1,
         borderColor: '#334155',
-        marginBottom: 15,
     },
-    statIconBox: {
-        width: 36,
-        height: 36,
-        borderRadius: 10,
-        justifyContent: 'center',
-        alignItems: 'center',
+    bannerContent: {
+        flex: 1,
+    },
+    badge: {
+        backgroundColor: '#00B1FC20',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 6,
+        alignSelf: 'flex-start',
         marginBottom: 10,
     },
-    statValue: {
-        fontSize: 16,
+    badgeText: {
+        fontSize: 10,
+        color: '#00B1FC',
+        fontWeight: 'bold',
+    },
+    bannerTitle: {
+        fontSize: 18,
         color: 'white',
         marginBottom: 4,
     },
-    statLabel: {
-        fontSize: 10,
-        color: '#94A3B8',
-    },
-    sectionTitle: {
-        fontSize: 18,
-        color: 'white',
-        marginBottom: 15,
-    },
-    uploadCard: {
-        height: 100,
-        borderRadius: 20,
-        overflow: 'hidden',
-        marginBottom: 30,
-    },
-    uploadGradient: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 20,
-    },
-    uploadInfo: {
-        flex: 1,
-    },
-    uploadTitle: {
-        fontSize: 18,
-        color: 'white',
-    },
-    uploadSubtitle: {
+    bannerDesc: {
         fontSize: 12,
-        color: 'rgba(255,255,255,0.7)',
+        color: '#94A3B8',
+        lineHeight: 18,
     },
-    uploadIconCircle: {
-        width: 50,
-        height: 50,
-        borderRadius: 25,
-        backgroundColor: 'white',
-        justifyContent: 'center',
-        alignItems: 'center',
+    bannerIcon: {
+        marginLeft: 10,
+        opacity: 0.8,
     },
     sectionHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
+        paddingHorizontal: 20,
         marginBottom: 15,
     },
-    seeAll: {
-        color: '#00B1FC',
-        fontSize: 14,
+    sectionTitle: {
+        fontSize: 18,
+        color: 'white',
     },
-    noteCard: {
-        backgroundColor: '#1E293B',
-        borderRadius: 16,
-        padding: 15,
-        marginBottom: 12,
+    liveIndicator: {
         flexDirection: 'row',
         alignItems: 'center',
+        backgroundColor: '#10B98115',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 20,
+    },
+    liveDot: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: '#10B981',
+        marginRight: 6,
+    },
+    liveText: {
+        fontSize: 10,
+        color: '#10B981',
+        fontWeight: 'bold',
+    },
+    statsGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        paddingHorizontal: 20,
+        justifyContent: 'space-between',
+    },
+    statCard: {
+        width: '48%',
+        backgroundColor: '#1E293B',
+        borderRadius: 20,
+        padding: 16,
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 15,
         borderWidth: 1,
         borderColor: '#334155',
     },
-    noteStatusBadge: {
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 6,
-        backgroundColor: 'rgba(245, 158, 11, 0.2)',
-        marginRight: 15,
+    statIconBox: {
+        width: 40,
+        height: 40,
+        borderRadius: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
     },
-    statusText: {
-        color: '#F59E0B',
-        fontSize: 10,
-        fontWeight: 'bold',
-    },
-    noteDetails: {
-        flex: 1,
-    },
-    noteTitle: {
+    statValue: {
+        fontSize: 16,
         color: 'white',
-        fontSize: 14,
-        marginBottom: 4,
     },
-    noteSub: {
-        color: '#94A3B8',
+    statLabel: {
+        fontSize: 11,
+        color: '#64748B',
+    },
+    performanceCard: {
+        marginHorizontal: 20,
+        backgroundColor: '#1E293B60',
+        padding: 16,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: '#334155',
+        marginBottom: 20,
+    },
+    row: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    perfIconBox: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: '#10B98115',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    perfTitle: {
+        fontSize: 15,
+        color: 'white',
+    },
+    perfDesc: {
         fontSize: 12,
-        marginBottom: 8,
+        color: '#94A3B8',
+        marginTop: 2,
     },
-    priceRow: {
+    actionCard: {
+        marginHorizontal: 20,
+        borderRadius: 20,
+        overflow: 'hidden',
+        marginBottom: 30,
+    },
+    actionGradient: {
+        padding: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    actionTitle: {
+        fontSize: 18,
+        color: 'white',
+    },
+    actionSubtitle: {
+        fontSize: 13,
+        color: 'rgba(255,255,255,0.8)',
+        marginTop: 2,
+    },
+    addIconCircle: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'white',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    goalCard: {
+        marginHorizontal: 20,
+        backgroundColor: '#1E293B',
+        padding: 20,
+        borderRadius: 24,
+        borderWidth: 1,
+        borderColor: '#00B1FC30',
+        marginTop: 10,
+    },
+    goalHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
+        marginBottom: 12,
     },
-    price: {
+    goalTitle: {
+        fontSize: 15,
+        color: 'white',
+    },
+    goalPercent: {
+        fontSize: 15,
         color: '#00B1FC',
         fontWeight: 'bold',
-        fontSize: 14,
     },
-    sales: {
+    progressBarBg: {
+        height: 8,
+        backgroundColor: '#0F172A',
+        borderRadius: 4,
+        overflow: 'hidden',
+        marginBottom: 12,
+    },
+    progressBarFill: {
+        height: '100%',
+        backgroundColor: '#00B1FC',
+        borderRadius: 4,
+    },
+    goalDesc: {
+        fontSize: 12,
         color: '#64748B',
-        fontSize: 11,
-    },
-    emptyState: {
-        alignItems: 'center',
-        paddingVertical: 40,
-    },
-    emptyText: {
-        color: '#64748B',
-        marginTop: 10,
+        lineHeight: 18,
     }
 });
 

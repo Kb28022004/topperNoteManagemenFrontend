@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 
-const useDebounceSearch = (delay = 500) => {
-    const [searchQuery, setSearchQuery] = useState('');
-    const [localSearch, setLocalSearch] = useState('');
+const useDebounceSearch = (initialValue = '', delay = 500) => {
+    const [searchQuery, setSearchQuery] = useState(initialValue);
+    const [localSearch, setLocalSearch] = useState(initialValue);
 
     useEffect(() => {
         const handler = setTimeout(() => {

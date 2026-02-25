@@ -81,6 +81,12 @@ export const studentApi = createApi({
       }),
       invalidatesTags: ["StudentProfile"],
     }),
+    
+    getPublicProfile: builder.query({
+      query: (studentId) => `/public/${studentId}`,
+      transformResponse: (response) => response.data,
+      providesTags: (result, error, id) => [{ type: "StudentProfile", id }],
+    }),
   }),
 });
 
@@ -92,4 +98,5 @@ export const {
   useUpdateProfilePictureMutation,
   useUpdateProfileMutation,
   useDeleteAccountMutation,
+  useGetPublicProfileQuery,
 } = studentApi;

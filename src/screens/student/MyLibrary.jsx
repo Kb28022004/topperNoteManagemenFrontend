@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
     View,
     StyleSheet,
@@ -7,11 +7,12 @@ import {
     TouchableOpacity,
     RefreshControl,
     ActivityIndicator,
-    Dimensions
+    Dimensions,
+    StatusBar,
 } from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { useGetPurchasedNotesQuery } from '../../features/api/noteApi';
+import { useGetPurchasedNotesQuery, useGetFavoriteNotesQuery } from '../../features/api/noteApi';
 import useRefresh from '../../hooks/useRefresh';
 import useDebounceSearch from '../../hooks/useDebounceSearch';
 import { getDownloadedNotes, deleteDownloadedNote } from '../../helpers/downloadService';
@@ -21,16 +22,23 @@ import NoDataFound from '../../components/NoDataFound';
 import Loader from '../../components/Loader';
 import { Theme } from '../../theme/Theme';
 import { useAlert } from '../../context/AlertContext';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const { width } = Dimensions.get('window');
 
-const MyLibrary = ({ navigation }) => {
+const MyLibrary = ({ navigation, route }) => {
     const { showAlert } = useAlert();
-    const { searchQuery, localSearch, setLocalSearch } = useDebounceSearch(500);
-    const [activeTab, setActiveTab] = useState('Purchases'); // 'Purchases' or 'Downloaded'
+    const { searchQuery, localSearch, setLocalSearch } = useDebounceSearch('', 500);
+    const [activeTab, setActiveTab] = useState(route.params?.initialTab || 'Purchases'); // 'Purchases', 'Favorites', or 'Downloaded'
+
+    useEffect(() => {
+        if (route.params?.initialTab) {
+            setActiveTab(route.params.initialTab);
+        }
+    }, [route.params?.initialTab]);
+
+    // ─── Purchases ────────────────────────────────────────
     const [page, setPage] = useState(1);
-    const [allNotes, setAllNotes] = useState([]);
-    const [hasMore, setHasMore] = useState(true);
 
     const {
         data: purchasedData,
@@ -38,39 +46,44 @@ const MyLibrary = ({ navigation }) => {
         isFetching,
         isError,
         error,
-        isSuccess,
         refetch,
     } = useGetPurchasedNotesQuery({
         search: searchQuery,
-        page: page,
+        page,
         limit: 10
     });
 
-    // Reset pagination when search changes
+    // ─── Favorites ────────────────────────────────────────
+    const [favoritesPage, setFavoritesPage] = useState(1);
+
+    const {
+        data: favoritesData,
+        isLoading: isFavoritesLoading,
+        isFetching: isFavoritesFetching,
+        refetch: refetchFavorites
+    } = useGetFavoriteNotesQuery({
+        search: searchQuery,
+        page: favoritesPage,
+        limit: 10
+    }, {
+        skip: activeTab !== 'Favorites'
+    });
+
+    // ─── Derived pagination state (from RTK Query cache) ──
+    const hasMore = (purchasedData?.pagination?.page || 0) < (purchasedData?.pagination?.totalPages || 0);
+    const hasMoreFavorites = (favoritesData?.pagination?.page || 0) < (favoritesData?.pagination?.totalPages || 0);
+
+    // Reset pages when search changes
     useEffect(() => {
         setPage(1);
-        setAllNotes([]);
-        setHasMore(true);
+        setFavoritesPage(1);
     }, [searchQuery]);
 
-    // Handle data accumulation
+    // Reset pages when tab changes (so stale pages don't carry over)
     useEffect(() => {
-        if (isSuccess && purchasedData) {
-            if (page === 1) {
-                setAllNotes(purchasedData.notes);
-            } else {
-                setAllNotes(prev => [...prev, ...purchasedData.notes]);
-            }
-            // Check if we have more pages
-            setHasMore(purchasedData.page < purchasedData.totalPages);
-        }
-    }, [isSuccess, purchasedData, page]);
-
-    const { refreshing, onRefresh } = useRefresh(async () => {
         setPage(1);
-        setHasMore(true);
-        await refetch();
-    });
+        setFavoritesPage(1);
+    }, [activeTab]);
 
     const [downloadedNotes, setDownloadedNotes] = useState([]);
 
@@ -79,41 +92,48 @@ const MyLibrary = ({ navigation }) => {
         setDownloadedNotes(downloads);
     }, []);
 
-    // Auto-refresh when screen comes into focus
+    const { refreshing, onRefresh } = useRefresh(async () => {
+        if (activeTab === 'Purchases') {
+            setPage(1);
+            await refetch();
+        } else if (activeTab === 'Favorites') {
+            setFavoritesPage(1);
+            await refetchFavorites();
+        } else {
+            await fetchDownloads();
+        }
+    });
+
     useFocusEffect(
         useCallback(() => {
             fetchDownloads();
-            if (isSuccess || isError) {
-                setPage(1);
-                refetch();
-            }
-        }, [refetch, isSuccess, isError, fetchDownloads])
+            if (activeTab === 'Purchases') refetch();
+            if (activeTab === 'Favorites') refetchFavorites();
+        }, [refetch, refetchFavorites, fetchDownloads, activeTab])
     );
 
     useEffect(() => {
-        if (isError) {
-            showAlert(
-                "Error",
-                error?.data?.message || "Failed to load your library. Please try again.",
-                "error"
-            );
+        if (isError && activeTab === 'Purchases') {
+            showAlert("Error", error?.data?.message || "Failed to load library", "error");
         }
-    }, [isError, error]);
+    }, [isError, error, activeTab]);
 
     const handleLoadMore = () => {
         if (activeTab === 'Purchases' && !isFetching && hasMore) {
             setPage(prev => prev + 1);
+        } else if (activeTab === 'Favorites' && !isFavoritesFetching && hasMoreFavorites) {
+            setFavoritesPage(prev => prev + 1);
         }
     };
 
     const handleDeleteDownload = (id) => {
         showAlert(
-            "Delete Download",
-            "Are you sure you want to remove this note from offline storage?",
+            "Remove Download",
+            "This will only delete the offline copy. You can download it again any time.",
             "warning",
             {
                 showCancel: true,
-                confirmText: "Delete",
+                confirmText: "Remove",
                 onConfirm: async () => {
                     await deleteDownloadedNote(id);
                     fetchDownloads();
@@ -126,109 +146,120 @@ const MyLibrary = ({ navigation }) => {
         const isOffline = activeTab === 'Downloaded' || downloadedNotes.some(d => d.id === item._id || d.id === item.id);
 
         return (
-            <View style={styles.card}>
-                <View style={styles.cardContent}>
-                    <View style={styles.textSection}>
-                        {isOffline && (
-                            <View style={styles.offlineBadge}>
-                                <Ionicons name="cloud-done-outline" size={14} color="#10B981" />
-                                <AppText style={[styles.offlineText, { color: '#10B981' }]}>DOWNLOADED</AppText>
+            <TouchableOpacity
+                style={styles.card}
+                activeOpacity={0.9}
+                onPress={() => navigation.navigate(activeTab === 'Purchases' ? 'NotePreview' : 'StudentNoteDetails', { noteId: item._id || item.id, isLocal: activeTab === 'Downloaded' })}
+            >
+                <View style={styles.cardCover}>
+                    <Image
+                        source={item.thumbnail ? { uri: item.thumbnail } : require('../../../assets/topper.avif')}
+                        style={styles.coverImage}
+                    />
+                    {isOffline && (
+                        <View style={styles.downloadIndicator}>
+                            <Ionicons name="cloud-done" size={16} color="#10B981" />
+                        </View>
+                    )}
+                </View>
+
+                <View style={styles.cardInfo}>
+                    <View style={styles.infoTop}>
+                        <AppText style={styles.noteSubject} weight="bold">{item.subject?.toUpperCase()}</AppText>
+                        <AppText style={styles.noteTitle} weight="medium" numberOfLines={2}>{item.title || item.chapterName}</AppText>
+                        <AppText style={styles.authorBadge}>By {item.topperName || 'Verified Topper'}</AppText>
+                    </View>
+
+                    <View style={styles.infoBottom}>
+                        <View style={styles.actionRow}>
+                            <View style={styles.primaryAction}>
+                                <Feather name="book-open" size={14} color="white" />
+                                <AppText style={styles.actionText} weight="bold">READ</AppText>
                             </View>
-                        )}
-                        {!isOffline && (
-                            <View style={styles.offlineBadge}>
-                                <Ionicons name="cloud-download-outline" size={14} color="#00B1FC" />
-                                <AppText style={styles.offlineText}>AVAILABLE OFFLINE</AppText>
-                            </View>
-                        )}
-
-                        <AppText style={styles.noteTitle} weight="bold" numberOfLines={1}>
-                            {item.title || `${item.subject} Notes`}
-                        </AppText>
-
-                        <AppText style={styles.topperName} numberOfLines={1}>
-                            By {item.topperName || 'Verified Topper'}
-                        </AppText>
-
-                        <View style={styles.cardActions}>
-                            <TouchableOpacity
-                                style={styles.readButton}
-                                onPress={() => navigation.navigate('NotePreview', { noteId: item._id || item.id, isLocal: activeTab === 'Downloaded' })}
-                            >
-                                <AppText style={styles.readButtonText} weight="bold">Read Now</AppText>
-                            </TouchableOpacity>
 
                             {activeTab === 'Downloaded' && (
                                 <TouchableOpacity
-                                    style={styles.deleteBtn}
+                                    style={styles.deleteIcon}
                                     onPress={() => handleDeleteDownload(item.id)}
                                 >
-                                    <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                                    <Feather name="trash-2" size={18} color="#EF4444" />
                                 </TouchableOpacity>
                             )}
                         </View>
                     </View>
-
-                    <View style={styles.imageSection}>
-                        <Image
-                            source={item.thumbnail ? { uri: item.thumbnail } : require('../../../assets/topper.avif')}
-                            style={styles.noteImage}
-                        />
-                    </View>
                 </View>
-            </View>
+            </TouchableOpacity>
         );
     };
 
     return (
         <View style={styles.container}>
-            {/* Header Area */}
+            <StatusBar barStyle="light-content" />
+
             <View style={styles.header}>
-                <View style={styles.titleRow}>
-                    <AppText style={styles.headerTitle} weight="bold">My Library</AppText>
-                    <View style={styles.headerActions}>
-                        <TouchableOpacity style={styles.actionBtn}>
-                            <Ionicons name="ellipsis-vertical" size={20} color="white" />
-                        </TouchableOpacity>
+                <View style={styles.headerTop}>
+                    <View>
+                        <AppText style={styles.headerLabel}>STUDENT DASHBOARD</AppText>
+                        <AppText style={styles.headerTitle} weight="bold">My Library</AppText>
                     </View>
+                    <TouchableOpacity style={styles.configBtn} onPress={() => navigation.navigate('TransactionHistory')}>
+                        <Feather name="clock" size={20} color="#94A3B8" />
+                    </TouchableOpacity>
                 </View>
 
                 <SearchBar
                     value={localSearch}
                     onChangeText={setLocalSearch}
-                    placeholder="Search my notes..."
-                    containerStyle={styles.searchContainer}
+                    placeholder="Search in your collection..."
+                    containerStyle={styles.searchBar}
                 />
 
-                {/* Segmented Control / Tabs */}
-                <View style={styles.tabContainer}>
+                <View style={styles.tabsWrapper}>
                     <TouchableOpacity
-                        style={[styles.tab, activeTab === 'Purchases' && styles.activeTab]}
+                        style={[styles.tabItem, activeTab === 'Purchases' && styles.activeTabItem]}
                         onPress={() => setActiveTab('Purchases')}
                     >
-                        <AppText style={[styles.tabText, activeTab === 'Purchases' && styles.activeTabText]} weight="bold">
-                            All Purchases
-                        </AppText>
+                        <AppText style={[styles.tabLabel, activeTab === 'Purchases' && styles.activeTabLabel]} weight="bold">PURCHASES</AppText>
+                        {activeTab === 'Purchases' && <View style={styles.activeLine} />}
                     </TouchableOpacity>
+
                     <TouchableOpacity
-                        style={[styles.tab, activeTab === 'Downloaded' && styles.activeTab]}
+                        style={[styles.tabItem, activeTab === 'Favorites' && styles.activeTabItem]}
+                        onPress={() => setActiveTab('Favorites')}
+                    >
+                        <AppText style={[styles.tabLabel, activeTab === 'Favorites' && styles.activeTabLabel]} weight="bold">FAVORITES</AppText>
+                        {activeTab === 'Favorites' && <View style={styles.activeLine} />}
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={[styles.tabItem, activeTab === 'Downloaded' && styles.activeTabItem]}
                         onPress={() => setActiveTab('Downloaded')}
                     >
-                        <AppText style={[styles.tabText, activeTab === 'Downloaded' && styles.activeTabText]} weight="bold">
-                            Downloaded
-                        </AppText>
+                        <AppText style={[styles.tabLabel, activeTab === 'Downloaded' && styles.activeTabLabel]} weight="bold">OFFLINE</AppText>
+                        {activeTab === 'Downloaded' && <View style={styles.activeLine} />}
                     </TouchableOpacity>
                 </View>
             </View>
 
-            {/* List */}
             <FlatList
-                data={activeTab === 'Purchases' ? allNotes : downloadedNotes}
+                data={
+                    activeTab === 'Purchases'
+                        ? (purchasedData?.notes || [])
+                        : activeTab === 'Favorites'
+                            ? (favoritesData?.notes || [])
+                            : downloadedNotes
+                }
                 renderItem={renderNoteCard}
                 keyExtractor={(item, index) => `${item._id || item.id}-${index}`}
-                contentContainerStyle={styles.listContent}
+                contentContainerStyle={styles.listContainer}
+                numColumns={2}
                 onEndReached={handleLoadMore}
                 onEndReachedThreshold={0.5}
+                removeClippedSubviews={true}
+                maxToRenderPerBatch={4}
+                windowSize={5}
+                initialNumToRender={4}
+
                 refreshControl={
                     <RefreshControl
                         refreshing={refreshing}
@@ -236,26 +267,42 @@ const MyLibrary = ({ navigation }) => {
                         tintColor="#00B1FC"
                     />
                 }
-                ListFooterComponent={
-                    isFetching && page > 1 ? (
-                        <ActivityIndicator size="small" color="#00B1FC" style={{ marginVertical: 20 }} />
-                    ) : null
-                }
+                ListHeaderComponent={() => (
+                    <View style={styles.libraryStats}>
+                        <View style={styles.libStatBox}>
+                            <AppText style={styles.statVal} weight="bold">
+                                {activeTab === 'Purchases'
+                                    ? (purchasedData?.pagination?.total || 0)
+                                    : activeTab === 'Favorites'
+                                        ? (favoritesData?.pagination?.total || 0)
+                                        : downloadedNotes.length}
+                            </AppText>
+                            <AppText style={styles.statLab}>Total Resources</AppText>
+                        </View>
+                        <View style={styles.statDivider} />
+                        <View style={styles.libStatBox}>
+                            <AppText style={styles.statVal} weight="bold">{downloadedNotes.length}</AppText>
+                            <AppText style={styles.statLab}>Offline Books</AppText>
+                        </View>
+                    </View>
+                )}
                 ListEmptyComponent={
-                    (isLoading || (isFetching && page === 1)) ? (
-                        <View style={{ marginTop: 60, alignItems: 'center' }}>
+                    (isLoading || isFavoritesLoading || (isFetching && page === 1) || (isFavoritesFetching && favoritesPage === 1)) ? (
+                        <View style={styles.centerBox}>
                             <ActivityIndicator size="large" color="#00B1FC" />
                         </View>
                     ) : (
                         <NoDataFound
-                            message={
-                                activeTab === 'Purchases'
-                                    ? (searchQuery ? "No matching notes found." : "You haven't purchased any notes yet.")
-                                    : "No downloaded notes found offline."
-                            }
-                            containerStyle={{ width: '100%', marginTop: 60 }}
+                            message={activeTab === 'Purchases' ? "No books found in your library." : (activeTab === 'Favorites' ? "No favorite notes yet." : "No offline downloads yet.")}
+                            icon={activeTab === 'Purchases' ? 'library-outline' : (activeTab === 'Favorites' ? 'heart-outline' : 'cloud-download-outline')}
+                            containerStyle={{ marginTop: 40 }}
                         />
                     )
+                }
+                ListFooterComponent={
+                    (isFetching && page > 1) || (isFavoritesFetching && favoritesPage > 1) ? (
+                        <ActivityIndicator size="small" color="#00B1FC" style={{ marginVertical: 20 }} />
+                    ) : <View style={{ height: 100 }} />
                 }
             />
         </View>
@@ -266,140 +313,183 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#0F172A',
-        paddingTop: 60,
     },
     header: {
-        paddingHorizontal: Theme.layout.screenPadding,
-        marginBottom: 10,
+        paddingTop: 60,
+        backgroundColor: '#1E293B40',
+        paddingHorizontal: 20,
+        borderBottomWidth: 1,
+        borderBottomColor: '#33415540',
     },
-    titleRow: {
+    headerTop: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: 20,
+    },
+    headerLabel: {
+        fontSize: 10,
+        color: '#64748B',
+        letterSpacing: 2,
+        marginBottom: 4,
     },
     headerTitle: {
         fontSize: 28,
         color: 'white',
     },
-    headerActions: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 15,
-    },
-    actionBtn: {
-        width: 38,
-        height: 38,
-        borderRadius: 19,
+    configBtn: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
         backgroundColor: '#1E293B',
         justifyContent: 'center',
         alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#334155',
     },
-    searchContainer: {
+    searchBar: {
         marginBottom: 20,
     },
-    tabContainer: {
+    tabsWrapper: {
         flexDirection: 'row',
-        backgroundColor: '#1E293B',
-        borderRadius: 12,
-        padding: 4,
-        marginBottom: 10,
+        gap: 30,
     },
-    tab: {
-        flex: 1,
-        paddingVertical: 10,
-        alignItems: 'center',
-        borderRadius: 10,
+    tabItem: {
+        paddingVertical: 12,
+        position: 'relative',
     },
-    activeTab: {
-        backgroundColor: '#0F172A',
-        elevation: 2,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.2,
-        shadowRadius: 2,
-    },
-    tabText: {
-        fontSize: 14,
-        color: '#94A3B8',
-    },
-    activeTabText: {
-        color: 'white',
-    },
-    listContent: {
-        paddingHorizontal: Theme.layout.screenPadding,
-        paddingBottom: 100,
-        paddingTop: 10,
-    },
-    card: {
-        backgroundColor: '#1E293B',
-        borderRadius: 24,
-        padding: 20,
-        marginBottom: 16,
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.05)',
-    },
-    cardContent: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-    },
-    textSection: {
-        flex: 1,
-        paddingRight: 10,
-        justifyContent: 'center',
-    },
-    offlineBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        marginBottom: 8,
-    },
-    offlineText: {
-        fontSize: 10,
-        color: '#00B1FC',
-        fontWeight: 'bold',
+    tabLabel: {
+        fontSize: 13,
+        color: '#64748B',
         letterSpacing: 0.5,
     },
-    noteTitle: {
+    activeTabLabel: {
+        color: '#00B1FC',
+    },
+    activeLine: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: 3,
+        backgroundColor: '#00B1FC',
+        borderTopLeftRadius: 3,
+        borderTopRightRadius: 3,
+    },
+    listContainer: {
+        paddingHorizontal: 15,
+        paddingTop: 20,
+    },
+    libraryStats: {
+        flexDirection: 'row',
+        backgroundColor: '#1E293B60',
+        marginHorizontal: 5,
+        borderRadius: 20,
+        paddingVertical: 15,
+        marginBottom: 25,
+        borderWidth: 1,
+        borderColor: '#33415530',
+        alignItems: 'center',
+    },
+    libStatBox: {
+        flex: 1,
+        alignItems: 'center',
+    },
+    statVal: {
         fontSize: 18,
         color: 'white',
-        marginBottom: 4,
     },
-    topperName: {
-        fontSize: 14,
-        color: '#94A3B8',
-        marginBottom: 15,
+    statLab: {
+        fontSize: 10,
+        color: '#64748B',
+        marginTop: 2,
     },
-    readButton: {
-        backgroundColor: '#00B1FC',
-        paddingHorizontal: 20,
-        paddingVertical: 10,
-        borderRadius: 10,
-        alignSelf: 'flex-start',
-    },
-    readButtonText: {
-        color: 'white',
-        fontSize: 14,
-    },
-    imageSection: {
-        width: 100,
-        height: 120,
-        borderRadius: 12,
-        overflow: 'hidden',
+    statDivider: {
+        width: 1,
+        height: '60%',
         backgroundColor: '#334155',
     },
-    noteImage: {
+    card: {
+        flex: 1,
+        margin: 5,
+        backgroundColor: '#1E293B',
+        borderRadius: 20,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: '#334155',
+        marginBottom: 15,
+    },
+    cardCover: {
+        width: '100%',
+        height: 160,
+        backgroundColor: '#33415540',
+        position: 'relative',
+    },
+    coverImage: {
         width: '100%',
         height: '100%',
         resizeMode: 'cover',
     },
-    cardActions: {
+    downloadIndicator: {
+        position: 'absolute',
+        top: 10,
+        right: 10,
+        backgroundColor: 'rgba(15, 23, 42, 0.8)',
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    cardInfo: {
+        padding: 12,
+        flex: 1,
+        justifyContent: 'space-between',
+    },
+    infoTop: {
+        marginBottom: 10,
+    },
+    noteSubject: {
+        fontSize: 9,
+        color: '#00B1FC',
+        letterSpacing: 1,
+        marginBottom: 4,
+    },
+    noteTitle: {
+        fontSize: 14,
+        color: 'white',
+        lineHeight: 18,
+        marginBottom: 6,
+    },
+    authorBadge: {
+        fontSize: 11,
+        color: '#64748B',
+    },
+    actionRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 15,
+        justifyContent: 'space-between',
+        marginTop: 5,
     },
-    deleteBtn: {
+    primaryAction: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#00B1FC20',
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 8,
+        gap: 6,
+    },
+    actionText: {
+        fontSize: 10,
+        color: '#00B1FC',
+    },
+    deleteIcon: {
         padding: 5,
+    },
+    centerBox: {
+        marginTop: 60,
+        alignItems: 'center',
     }
 });
 

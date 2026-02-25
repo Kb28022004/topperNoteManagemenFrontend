@@ -13,7 +13,9 @@ import { Ionicons, MaterialCommunityIcons, Feather, FontAwesome5 } from '@expo/v
 import { LinearGradient } from 'expo-linear-gradient';
 import AppText from '../../components/AppText';
 import Loader from '../../components/Loader';
+import ScreenLoader from '../../components/ScreenLoader';
 import { useGetPublicProfileQuery, useFollowTopperMutation } from '../../features/api/topperApi';
+import { useToggleFavoriteNoteMutation } from '../../features/api/noteApi';
 import useRefresh from '../../hooks/useRefresh';
 import { useAlert } from '../../context/AlertContext';
 
@@ -33,6 +35,8 @@ const PublicTopperProfile = ({ route, navigation }) => {
 
     // Use local state needed for immediate UI update on toggle
     const [following, setFollowing] = useState(false);
+    const [toggleFavorite] = useToggleFavoriteNoteMutation();
+    const [favoriteStates, setFavoriteStates] = useState({}); // {noteId: boolean}
 
     useEffect(() => {
         if (profile?.data) {
@@ -41,7 +45,7 @@ const PublicTopperProfile = ({ route, navigation }) => {
         }
     }, [profile]);
 
-    if (isLoading) return <Loader visible />;
+    if (isLoading) return <ScreenLoader />;
     if (isError || !profile) return (
         <View style={styles.center}>
             <AppText style={{ color: '#EF4444' }}>Profile not found {topperId}</AppText>
@@ -71,6 +75,17 @@ const PublicTopperProfile = ({ route, navigation }) => {
         }
     };
 
+    const handleFavoriteToggle = async (noteId, currentStatus) => {
+        try {
+            const newStatus = !currentStatus;
+            setFavoriteStates(prev => ({ ...prev, [noteId]: newStatus }));
+            await toggleFavorite(noteId).unwrap();
+        } catch (error) {
+            setFavoriteStates(prev => ({ ...prev, [noteId]: currentStatus }));
+            showAlert("Error", "Failed to update favourite status", "error");
+        }
+    };
+
     const renderNoteCard = ({ item }) => (
         <TouchableOpacity
             style={styles.noteCard}
@@ -78,6 +93,18 @@ const PublicTopperProfile = ({ route, navigation }) => {
         >
             <View style={styles.noteThumbnail}>
                 <Image source={item.coverImage ? { uri: item.coverImage } : require('../../../assets/topper.avif')} style={styles.thumbnailImg} resizeMode="cover" />
+
+                <TouchableOpacity
+                    style={styles.saveBtnTopper}
+                    onPress={() => handleFavoriteToggle(item.id, favoriteStates[item.id] !== undefined ? favoriteStates[item.id] : item.isFavorite)}
+                >
+                    <Ionicons
+                        name={(favoriteStates[item.id] !== undefined ? favoriteStates[item.id] : item.isFavorite) ? "heart" : "heart-outline"}
+                        size={16}
+                        color={(favoriteStates[item.id] !== undefined ? favoriteStates[item.id] : item.isFavorite) ? "#F43F5E" : "white"}
+                    />
+                </TouchableOpacity>
+
                 <View style={styles.pageBadge}>
                     <AppText style={styles.pageText}>{item.pageCount || 24} pgs</AppText>
                 </View>
@@ -176,7 +203,7 @@ const PublicTopperProfile = ({ route, navigation }) => {
                     <View style={styles.actionButtons}>
                         <TouchableOpacity style={[styles.followBtn, following && { backgroundColor: '#334155' }]} onPress={handleFollow} disabled={isFollowing}>
                             <Ionicons name={following ? "checkmark" : "person-add"} size={18} color="white" />
-                            <AppText style={styles.followText}>{initialFollowing ? 'Unfollow' : 'Follow'}</AppText>
+                            <AppText style={styles.followText}>{following ? 'Following' : 'Follow'}</AppText>
                         </TouchableOpacity>
 
                         <TouchableOpacity style={styles.messageBtn} onPress={() => showAlert("Message", "Messaging feature coming soon!", "info")}>
@@ -534,6 +561,18 @@ const styles = StyleSheet.create({
         backgroundColor: '#334155',
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    saveBtnTopper: {
+        position: 'absolute',
+        top: 5,
+        left: 5,
+        backgroundColor: 'rgba(15, 23, 42, 0.7)',
+        width: 26,
+        height: 26,
+        borderRadius: 13,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 1,
     },
 });
 

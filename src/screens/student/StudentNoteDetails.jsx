@@ -17,7 +17,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import AppText from '../../components/AppText';
 import ReusableButton from '../../components/ReausableButton';
 import Loader from '../../components/Loader';
-import { useGetNoteDetailsQuery, useAddReviewMutation } from '../../features/api/noteApi';
+import ScreenLoader from '../../components/ScreenLoader';
+import { NoteDetailsSkeleton } from '../../components/Skeleton';
+import { useGetNoteDetailsQuery, useAddReviewMutation, useToggleFavoriteNoteMutation } from '../../features/api/noteApi';
 import { useFollowTopperMutation, topperApi } from '../../features/api/topperApi';
 import { useCreateOrderMutation, useVerifyPaymentMutation } from '../../features/api/paymentApi';
 import { useDispatch } from 'react-redux';
@@ -39,6 +41,7 @@ const StudentNoteDetails = ({ route, navigation }) => {
     // Payment Hooks
     const [createOrder, { isLoading: isCreatingOrder }] = useCreateOrderMutation();
     const [verifyPayment, { isLoading: isVerifyingPayment }] = useVerifyPaymentMutation();
+    const [toggleFavorite] = useToggleFavoriteNoteMutation();
 
     const [reviewModalVisible, setReviewModalVisible] = useState(false);
     const [rating, setRating] = useState(5);
@@ -49,6 +52,7 @@ const StudentNoteDetails = ({ route, navigation }) => {
     const [isDownloaded, setIsDownloaded] = useState(false);
     const [downloadProgress, setDownloadProgress] = useState(0);
     const [isDownloading, setIsDownloading] = useState(false);
+    const [isFavorite, setIsFavorite] = useState(false);
     const { showAlert } = useAlert();
     const dispatch = useDispatch();
 
@@ -68,6 +72,7 @@ const StudentNoteDetails = ({ route, navigation }) => {
                 setIsDownloaded(status);
             };
             checkDownload();
+            setIsFavorite(note.isFavorite);
         }
     }, [note]);
 
@@ -81,7 +86,7 @@ const StudentNoteDetails = ({ route, navigation }) => {
         }
     };
 
-    if (isLoading) return <Loader visible />;
+    if (isLoading) return <NoteDetailsSkeleton />;
     if (isError) return (
         <View style={styles.center}>
             <AppText style={{ color: '#EF4444' }}>Failed to load note details</AppText>
@@ -136,6 +141,21 @@ const StudentNoteDetails = ({ route, navigation }) => {
             console.log("Review Error:", error);
             const errorMessage = error?.data?.message || "Failed to add review";
             showAlert("Error", errorMessage, "error");
+        }
+    };
+
+    const handleToggleFavorite = async () => {
+        try {
+            // Optimistic update
+            const newFavoriteStatus = !isFavorite;
+            setIsFavorite(newFavoriteStatus);
+
+            await toggleFavorite(noteId).unwrap();
+        } catch (error) {
+            console.log("Toggle Favourite Error:", error);
+            // Revert if failed
+            setIsFavorite(isFavorite);
+            showAlert("Error", "Failed to update favourite status", "error");
         }
     };
 
@@ -241,16 +261,6 @@ const StudentNoteDetails = ({ route, navigation }) => {
 
     return (
         <View style={styles.container}>
-            {/* Header */}
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}>
-                    <Ionicons name="chevron-back" size={24} color="white" />
-                </TouchableOpacity>
-                <AppText style={styles.headerTitle} weight="bold">Note Details</AppText>
-                <TouchableOpacity onPress={handleShare} style={styles.iconBtn}>
-                    <Ionicons name="share-social-outline" size={24} color="white" />
-                </TouchableOpacity>
-            </View>
 
             <ScrollView
                 showsVerticalScrollIndicator={false}
@@ -267,9 +277,6 @@ const StudentNoteDetails = ({ route, navigation }) => {
                     />
                     <View style={styles.overlay} />
 
-                    <View style={styles.bestSellerBadge}>
-                        <AppText style={styles.bestSellerText}>BEST SELLER</AppText>
-                    </View>
 
                     <TouchableOpacity
                         style={styles.previewBtn}
@@ -289,7 +296,7 @@ const StudentNoteDetails = ({ route, navigation }) => {
                     <AppText style={styles.title} weight="bold">{title}</AppText>
                     <View style={styles.ratingMeta}>
                         <Ionicons name="star" size={16} color="#FFD700" />
-                        <AppText style={styles.ratingValue} weight="bold">{avgRating}</AppText>
+                        <AppText style={styles.ratingValue} weight="bold">{avgRating || '0.0'}</AppText>
                         <View style={styles.dot} />
                         <AppText style={styles.reviewCount}>{reviewCount || 0} Reviews</AppText>
                     </View>
@@ -310,7 +317,7 @@ const StudentNoteDetails = ({ route, navigation }) => {
                                     </AppText>
                                 </TouchableOpacity>
                             </View>
-                            <AppText style={styles.topperBio}>{topper?.bio}</AppText>
+                            {topper?.bio && <AppText style={styles.topperBio}>{topper.bio}</AppText>}
                         </View>
                         <TouchableOpacity onPress={() => navigation.navigate('PublicTopperProfile', { topperId: topper.id })}>
                             <AppText style={styles.viewProfileText} weight="bold">View Profile</AppText>
@@ -324,16 +331,20 @@ const StudentNoteDetails = ({ route, navigation }) => {
                             <AppText style={styles.statValue} weight="bold">{pageCount || 0}</AppText>
                             <AppText style={styles.statLabel}>Pages</AppText>
                         </View>
-                        <View style={styles.statBox}>
-                            <MaterialCommunityIcons name="translate" size={24} color="#3B82F6" />
-                            <AppText style={styles.statValue} weight="bold">{language || "English"}</AppText>
-                            <AppText style={styles.statLabel}>Language</AppText>
-                        </View>
-                        <View style={styles.statBox}>
-                            <MaterialCommunityIcons name="file-pdf-box" size={24} color="#3B82F6" />
-                            <AppText style={styles.statValue} weight="bold">{pdfSize || "0MB"}</AppText>
-                            <AppText style={styles.statLabel}>PDF Size</AppText>
-                        </View>
+                        {language && (
+                            <View style={styles.statBox}>
+                                <MaterialCommunityIcons name="translate" size={24} color="#3B82F6" />
+                                <AppText style={styles.statValue} weight="bold">{language}</AppText>
+                                <AppText style={styles.statLabel}>Language</AppText>
+                            </View>
+                        )}
+                        {pdfSize && (
+                            <View style={styles.statBox}>
+                                <MaterialCommunityIcons name="file-pdf-box" size={24} color="#3B82F6" />
+                                <AppText style={styles.statValue} weight="bold">{pdfSize}</AppText>
+                                <AppText style={styles.statLabel}>PDF Size</AppText>
+                            </View>
+                        )}
                     </View>
 
                     {/* Description */}
@@ -341,22 +352,22 @@ const StudentNoteDetails = ({ route, navigation }) => {
                     <AppText style={styles.descriptionText}>{description || "No description available"}</AppText>
 
                     {/* Table of Contents */}
-                    <AppText style={styles.sectionTitle} weight="bold">Table of Contents</AppText>
-                    <View style={styles.tocList}>
-                        {tableOfContents.map((chapter, index) => (
-                            <View key={index} style={styles.tocItem}>
-                                <View style={styles.chapterNumberBox}>
-                                    <AppText style={styles.chapterNumber}>{index + 1}</AppText>
-                                </View>
-                                <AppText style={styles.chapterTitle} numberOfLines={1}>{chapter.title}</AppText>
-                                <AppText style={styles.chapterPage}>{chapter.pageNumber}</AppText>
+                    {tableOfContents && tableOfContents.length > 0 && (
+                        <>
+                            <AppText style={styles.sectionTitle} weight="bold">Table of Contents</AppText>
+                            <View style={styles.tocList}>
+                                {tableOfContents.map((chapter, index) => (
+                                    <View key={index} style={styles.tocItem}>
+                                        <View style={styles.chapterNumberBox}>
+                                            <AppText style={styles.chapterNumber}>{index + 1}</AppText>
+                                        </View>
+                                        <AppText style={styles.chapterTitle} numberOfLines={1}>{chapter.title}</AppText>
+                                        {chapter.pageNumber && <AppText style={styles.chapterPage}>Pg {chapter.pageNumber}</AppText>}
+                                    </View>
+                                ))}
                             </View>
-                        ))}
-                        <TouchableOpacity style={styles.showAllChapters}>
-                            <AppText style={styles.showAllText}>Show All Chapters</AppText>
-                            <Ionicons name="chevron-down" size={16} color="#3B82F6" />
-                        </TouchableOpacity>
-                    </View>
+                        </>
+                    )}
 
 
                     {/* Reviews */}
@@ -390,11 +401,8 @@ const StudentNoteDetails = ({ route, navigation }) => {
             {/* Bottom Bar */}
             <View style={styles.bottomBar}>
                 <View>
-                    <View style={styles.priceRow}>
-                        <AppText style={styles.finalPrice} weight="bold">₹{price?.current}</AppText>
-                        <AppText style={styles.discountText}>{price?.discount}</AppText>
-                    </View>
-                    <AppText style={styles.strikePrice}>₹{price?.original}</AppText>
+                    <AppText style={styles.finalPrice} weight="bold">₹{typeof price === 'object' ? price.current : price}</AppText>
+                    <AppText style={styles.strikePrice}>Total Amount</AppText>
                 </View>
 
                 {isPurchased ? (
@@ -435,6 +443,22 @@ const StudentNoteDetails = ({ route, navigation }) => {
                         </LinearGradient>
                     </TouchableOpacity>
                 )}
+            </View>
+
+            {/* Header (Moved here to ensure it is on top of ScrollView) */}
+            <View style={styles.header}>
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}>
+                    <Ionicons name="chevron-back" size={24} color="white" />
+                </TouchableOpacity>
+                <AppText style={styles.headerTitle} weight="bold">Note Details</AppText>
+                <View style={styles.rightIcons}>
+                    <TouchableOpacity onPress={handleToggleFavorite} style={styles.iconBtn}>
+                        <Ionicons name={isFavorite ? "heart" : "heart-outline"} size={24} color={isFavorite ? "#F43F5E" : "white"} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={handleShare} style={styles.iconBtn}>
+                        <Ionicons name="share-social-outline" size={24} color="white" />
+                    </TouchableOpacity>
+                </View>
             </View>
 
             {/* Review Modal (Same as before) */}
@@ -492,17 +516,22 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: 20,
-        paddingTop: 30,
+        paddingTop: 40,
         paddingBottom: 15,
         backgroundColor: '#0F172A',
         position: 'absolute',
         top: 0,
         left: 0,
         right: 0,
+        zIndex: 10,
     },
     headerTitle: {
         color: 'white',
         fontSize: 18,
+    },
+    rightIcons: {
+        flexDirection: 'row',
+        alignItems: 'center',
     },
     iconBtn: {
         padding: 8,
@@ -799,6 +828,7 @@ const styles = StyleSheet.create({
         bottom: 0,
         left: 0,
         right: 0,
+        zIndex: 10,
         backgroundColor: '#0F172A', // Dark background
         borderTopWidth: 1,
         borderTopColor: '#1E293B',

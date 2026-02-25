@@ -7,9 +7,12 @@ import {
     FlatList,
     Dimensions,
     ActivityIndicator,
-    RefreshControl
+    RefreshControl,
+    StatusBar,
+    Image,
 } from 'react-native';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import AppText from '../../components/AppText';
 import { useGetProfileQuery } from '../../features/api/topperApi';
 import { useGetMyNotesQuery } from '../../features/api/noteApi';
@@ -34,55 +37,69 @@ const TopperDashboard = ({ navigation }) => {
     }, [refetchProfile, refetchNotes]);
 
     const topperStats = profile?.data?.stats;
+    const userData = profile?.data;
 
     const filteredNotes = useMemo(() => {
-        if (!notes) return [];
-        if (filter === 'All') return notes;
-        return notes.filter(n => n.status.toUpperCase() === filter.toUpperCase());
+        const notesList = notes?.notes || [];
+        if (filter === 'All') return notesList;
+        return notesList.filter(n => n.status.toUpperCase() === filter.toUpperCase());
     }, [notes, filter]);
 
     const renderNoteItem = ({ item }) => (
         <TouchableOpacity
-            style={styles.noteItem}
-            onPress={() => navigation.navigate('NotePreview', { noteId: item._id })}
+            style={styles.noteCard}
+            activeOpacity={0.8}
+            onPress={() => navigation.navigate('TopperNoteDetails', { noteId: item._id })}
         >
-            <View style={styles.noteIconBox}>
-                <MaterialCommunityIcons name="file-pdf-box" size={24} color="#EF4444" />
-            </View>
-            <View style={styles.noteMainInfo}>
-                <AppText style={styles.noteTitle} weight="bold">{item.subject} - {item.chapterName}</AppText>
-                <View style={styles.noteMetaRow}>
-                    <View style={[styles.statusBadge, { backgroundColor: item.status === 'PUBLISHED' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)' }]}>
-                        <AppText style={[styles.statusText, { color: item.status === 'PUBLISHED' ? '#10B981' : '#F59E0B' }]}>
-                            {item.status === 'PUBLISHED' ? 'Approved' : 'Pending'}
-                        </AppText>
-                    </View>
-                    <AppText style={styles.dot}>•</AppText>
-                    <AppText style={styles.metaText}>{new Date(item.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</AppText>
+            <View style={styles.noteIconSection}>
+                <View style={[styles.iconBlur, { backgroundColor: item.status === 'PUBLISHED' ? '#10B98120' : '#F59E0B20' }]}>
+                    <MaterialCommunityIcons
+                        name="file-document-outline"
+                        size={24}
+                        color={item.status === 'PUBLISHED' ? '#10B981' : '#F59E0B'}
+                    />
                 </View>
             </View>
-            <View style={styles.notePriceInfo}>
+
+            <View style={styles.noteContentSection}>
+                <AppText style={styles.noteTitle} weight="bold" numberOfLines={1}>
+                    {item.subject} • {item.chapterName}
+                </AppText>
+                <View style={styles.noteBadges}>
+                    <View style={[styles.miniBadge, { backgroundColor: '#1E293B' }]}>
+                        <AppText style={styles.miniBadgeText}>Class {item.class}</AppText>
+                    </View>
+                    <View style={[styles.statusTag, { backgroundColor: item.status === 'PUBLISHED' ? '#10B98120' : '#F59E0B20' }]}>
+                        <View style={[styles.statusDot, { backgroundColor: item.status === 'PUBLISHED' ? '#10B981' : '#F59E0B' }]} />
+                        <AppText style={[styles.statusText, { color: item.status === 'PUBLISHED' ? '#10B981' : '#F59E0B' }]}>
+                            {item.status === 'PUBLISHED' ? 'Active' : 'Pending'}
+                        </AppText>
+                    </View>
+                </View>
+            </View>
+
+            <View style={styles.noteStatsSection}>
                 <AppText style={styles.notePrice} weight="bold">₹{item.price}</AppText>
-                <View style={styles.salesRow}>
-                    <MaterialCommunityIcons name="shopping-outline" size={12} color="#94A3B8" />
-                    <AppText style={styles.salesCount}>{item.salesCount || 0} sold</AppText>
+                <View style={styles.miniSales}>
+                    <Feather name="trending-up" size={10} color="#94A3B8" />
+                    <AppText style={styles.miniSalesText}>{item.salesCount || 0} sold</AppText>
                 </View>
             </View>
         </TouchableOpacity>
     );
 
+    const QuickAction = ({ icon, label, color, onPress }) => (
+        <TouchableOpacity style={styles.actionItem} onPress={onPress} activeOpacity={0.7}>
+            <View style={[styles.actionIconBox, { backgroundColor: `${color}15` }]}>
+                <Ionicons name={icon} size={22} color={color} />
+            </View>
+            <AppText style={styles.actionLabel}>{label}</AppText>
+        </TouchableOpacity>
+    );
+
     return (
         <View style={styles.container}>
-            {/* Header */}
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()}>
-                    <Ionicons name="arrow-back" size={24} color="white" />
-                </TouchableOpacity>
-                <AppText style={styles.headerTitle} weight="bold">Dashboard</AppText>
-                <TouchableOpacity>
-                    <Ionicons name="settings-outline" size={24} color="white" />
-                </TouchableOpacity>
-            </View>
+            <StatusBar barStyle="light-content" />
 
             <ScrollView
                 showsVerticalScrollIndicator={false}
@@ -97,52 +114,92 @@ const TopperDashboard = ({ navigation }) => {
                     />
                 }
             >
-                {/* Earnings Card */}
-                <View style={styles.earningsCard}>
-                    <AppText style={styles.labelSmall}>Total Sales</AppText>
-                    <View style={styles.mainEarningsRow}>
-                        <AppText style={styles.mainEarnings} weight="bold">₹{topperStats?.totalEarnings || 0}</AppText>
-                        <View style={styles.trendRow}>
-                            <AppText style={styles.trendText}>+12%</AppText>
-                        </View>
+                {/* Modern Header */}
+                <View style={styles.header}>
+                    <View>
+                        <AppText style={styles.greeting}>Hello, Topper! 👋</AppText>
+                        <AppText style={styles.userName} weight="bold">{userData?.fullName || 'Professional'}</AppText>
                     </View>
-
-                    <View style={styles.subStatsRow}>
-                        <View style={styles.subStatBox}>
-                            <AppText style={styles.labelExtraSmall}>THIS MONTH</AppText>
-                            <AppText style={styles.subStatValue} weight="bold">₹{topperStats?.thisMonthEarnings || 0}</AppText>
-                        </View>
-                        <View style={styles.subStatBox}>
-                            <AppText style={styles.labelExtraSmall}>PENDING</AppText>
-                            <AppText style={styles.subStatValue} weight="bold">₹{topperStats?.pendingEarnings || 0}</AppText>
-                        </View>
-                    </View>
-
-                    <TouchableOpacity style={styles.withdrawBtn}>
-                        <MaterialCommunityIcons name="wallet-outline" size={20} color="white" style={{ marginRight: 8 }} />
-                        <AppText style={styles.withdrawText} weight="bold">Withdraw Funds</AppText>
+                    <TouchableOpacity
+                        style={styles.profileBtn}
+                        onPress={() => navigation.navigate('TopperProfile')}
+                    >
+                        <Image
+                            source={userData?.profilePhoto ? { uri: userData.profilePhoto } : require('../../../assets/topper.avif')}
+                            style={styles.headerAvatar}
+                        />
                     </TouchableOpacity>
                 </View>
 
-                {/* My Uploaded Notes Section */}
+                {/* Main Earnings Card (Glassmorphism inspired) */}
+                <LinearGradient
+                    colors={['#1E293B', '#0F172A']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.earningsCard}
+                >
+                    <View style={styles.cardHeader}>
+                        <View>
+                            <AppText style={styles.cardLabel}>TOTAL REVENUE</AppText>
+                            <AppText style={styles.cardMainValue} weight="bold">₹{topperStats?.totalEarnings || 0}</AppText>
+                        </View>
+                        <View style={styles.growthBadge}>
+                            <Ionicons name="arrow-up" size={12} color="#10B981" />
+                            <AppText style={styles.growthText}>12.5%</AppText>
+                        </View>
+                    </View>
+
+                    <View style={styles.cardDivider} />
+
+                    <View style={styles.cardStatsRow}>
+                        <View style={styles.cardStatBox}>
+                            <AppText style={styles.cardStatLabel}>This Month</AppText>
+                            <AppText style={styles.cardStatValue} weight="bold">₹{topperStats?.thisMonthEarnings || 0}</AppText>
+                        </View>
+                        <View style={styles.cardStatDivider} />
+                        <View style={styles.cardStatBox}>
+                            <AppText style={styles.cardStatLabel}>Total Sales</AppText>
+                            <AppText style={styles.cardStatValue} weight="bold">{topperStats?.totalSold || 0}</AppText>
+                        </View>
+                    </View>
+
+                    <TouchableOpacity style={styles.withdrawBtn} activeOpacity={0.9}>
+                        <LinearGradient
+                            colors={['#00B1FC', '#007FFF']}
+                            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                            style={styles.withdrawGradient}
+                        >
+                            <AppText style={styles.withdrawText} weight="bold">Payout Settings</AppText>
+                            <Ionicons name="chevron-forward" size={18} color="white" />
+                        </LinearGradient>
+                    </TouchableOpacity>
+                </LinearGradient>
+
+                {/* Quick Actions Section */}
+                <AppText style={styles.sectionTitle} weight="bold">Quick Actions</AppText>
+                <View style={styles.actionsGrid}>
+                    <QuickAction icon="add-circle-outline" label="Add Note" color="#00B1FC" onPress={() => navigation.navigate('UploadNotes')} />
+                    <QuickAction icon="people-outline" label="Followers" color="#A855F7" onPress={() => navigation.navigate('Followers', { userId: userData?.userId })} />
+                    <QuickAction icon="star-outline" label="Reviews" color="#F59E0B" onPress={() => navigation.navigate('TopperReviews', { topperId: userData?.userId })} />
+                    <QuickAction icon="wallet-outline" label="Earnings" color="#10B981" onPress={() => navigation.navigate('EarningsPayouts')} />
+                </View>
+
+                {/* My Uploads with Improved Filters */}
                 <View style={styles.sectionHeader}>
-                    <AppText style={styles.sectionTitle} weight="bold">My Uploaded Notes</AppText>
-                    <TouchableOpacity>
-                        <Feather name="sliders" size={18} color="#94A3B8" />
+                    <AppText style={styles.sectionTitle} weight="bold">Recent Uploads</AppText>
+                    <TouchableOpacity onPress={() => navigation.navigate('MyUploads')}>
+                        <AppText style={styles.seeAllText}>See All</AppText>
                     </TouchableOpacity>
                 </View>
 
-                {/* Filters */}
-                <View style={styles.filterRow}>
+                <View style={styles.filterBar}>
                     {['All', 'Published', 'Pending'].map((f) => (
                         <TouchableOpacity
                             key={f}
-                            style={[styles.filterBtn, filter === f && styles.filterBtnActive]}
+                            style={[styles.filterChip, filter === f && styles.filterChipActive]}
                             onPress={() => setFilter(f)}
                         >
-                            {f === 'Published' && <Ionicons name="checkmark-circle" size={14} color={filter === f ? 'white' : '#10B981'} style={{ marginRight: 4 }} />}
-                            {f === 'Pending' && <Ionicons name="time" size={14} color={filter === f ? 'white' : '#F59E0B'} style={{ marginRight: 4 }} />}
-                            <AppText style={[styles.filterText, filter === f && styles.filterTextActive]}>
+                            <AppText style={[styles.filterChipText, filter === f && styles.filterChipTextActive]}>
                                 {f === 'Published' ? 'Approved' : f}
                             </AppText>
                         </TouchableOpacity>
@@ -153,27 +210,20 @@ const TopperDashboard = ({ navigation }) => {
                     <ActivityIndicator color="#00B1FC" style={{ marginTop: 40 }} />
                 ) : (
                     <FlatList
-                        data={filteredNotes}
+                        data={filteredNotes.slice(0, 5)}
                         renderItem={renderNoteItem}
                         keyExtractor={item => item._id}
                         scrollEnabled={false}
-                        contentContainerStyle={{ gap: 12 }}
+                        contentContainerStyle={styles.notesList}
                         ListEmptyComponent={
                             <View style={styles.emptyState}>
+                                <Ionicons name="document-text-outline" size={48} color="#1E293B" />
                                 <AppText style={styles.emptyText}>No notes found</AppText>
                             </View>
                         }
                     />
                 )}
             </ScrollView>
-
-            {/* Floating Action Button */}
-            <TouchableOpacity
-                style={styles.fab}
-                onPress={() => navigation.navigate('UploadNotes')}
-            >
-                <Ionicons name="add" size={30} color="white" />
-            </TouchableOpacity>
         </View>
     );
 };
@@ -182,213 +232,280 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#0F172A',
-        paddingTop: 50,
+    },
+    scrollContent: {
+        paddingBottom: 100,
+        paddingTop: 60,
     },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 20,
-        marginBottom: 20,
+        marginBottom: 25,
     },
-    headerTitle: {
-        fontSize: 18,
+    greeting: {
+        fontSize: 14,
+        color: '#94A3B8',
+        marginBottom: 2,
+    },
+    userName: {
+        fontSize: 24,
         color: 'white',
     },
-    scrollContent: {
-        paddingHorizontal: 20,
-        paddingBottom: 100,
+    profileBtn: {
+        borderWidth: 2,
+        borderColor: '#1E293B',
+        borderRadius: 25,
+        padding: 2,
+    },
+    headerAvatar: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
     },
     earningsCard: {
-        backgroundColor: '#1E293B',
-        borderRadius: 24,
+        marginHorizontal: 20,
+        borderRadius: 28,
         padding: 24,
         borderWidth: 1,
         borderColor: '#334155',
         marginBottom: 30,
+        overflow: 'hidden',
     },
-    labelSmall: {
-        fontSize: 12,
-        color: '#94A3B8',
-        marginBottom: 8,
-    },
-    mainEarningsRow: {
+    cardHeader: {
         flexDirection: 'row',
-        alignItems: 'baseline',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
         marginBottom: 20,
     },
-    mainEarnings: {
+    cardLabel: {
+        fontSize: 10,
+        color: '#94A3B8',
+        letterSpacing: 1.5,
+        marginBottom: 8,
+    },
+    cardMainValue: {
         fontSize: 36,
         color: 'white',
     },
-    trendRow: {
-        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    growthBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#10B98115',
         paddingHorizontal: 8,
         paddingVertical: 4,
-        borderRadius: 12,
-        marginLeft: 12,
+        borderRadius: 10,
+        gap: 2,
     },
-    trendText: {
-        color: '#10B981',
+    growthText: {
         fontSize: 12,
+        color: '#10B981',
         fontWeight: 'bold',
     },
-    subStatsRow: {
+    cardDivider: {
+        height: 1,
+        backgroundColor: '#334155',
+        marginBottom: 20,
+    },
+    cardStatsRow: {
         flexDirection: 'row',
-        marginBottom: 24,
-        gap: 15,
+        alignItems: 'center',
+        marginBottom: 25,
     },
-    subStatBox: {
+    cardStatBox: {
         flex: 1,
-        backgroundColor: '#0F172A',
-        borderRadius: 16,
-        padding: 15,
-        borderWidth: 1,
-        borderColor: '#334155',
     },
-    labelExtraSmall: {
-        fontSize: 10,
+    cardStatLabel: {
+        fontSize: 12,
         color: '#64748B',
         marginBottom: 4,
     },
-    subStatValue: {
+    cardStatValue: {
         fontSize: 18,
         color: 'white',
     },
+    cardStatDivider: {
+        width: 1,
+        height: 24,
+        backgroundColor: '#334155',
+        marginHorizontal: 15,
+    },
     withdrawBtn: {
-        backgroundColor: '#00B1FC',
-        height: 56,
         borderRadius: 16,
+        overflow: 'hidden',
+    },
+    withdrawGradient: {
         flexDirection: 'row',
         justifyContent: 'center',
         alignItems: 'center',
+        paddingVertical: 14,
+        gap: 8,
     },
     withdrawText: {
         color: 'white',
-        fontSize: 16,
+        fontSize: 14,
     },
     sectionHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
+        paddingHorizontal: 20,
         marginBottom: 16,
     },
     sectionTitle: {
         fontSize: 18,
         color: 'white',
+        marginHorizontal: 20,
+        marginBottom: 16,
     },
-    filterRow: {
-        flexDirection: 'row',
-        marginBottom: 20,
-        gap: 10,
+    seeAllText: {
+        color: '#00B1FC',
+        fontSize: 14,
+        fontWeight: '600',
     },
-    filterBtn: {
+    actionsGrid: {
         flexDirection: 'row',
+        paddingHorizontal: 20,
+        justifyContent: 'space-between',
+        marginBottom: 35,
+    },
+    actionItem: {
         alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        backgroundColor: '#1E293B',
-        borderRadius: 20,
-        borderWidth: 1,
-        borderColor: '#334155',
+        width: (width - 40) / 4.5,
     },
-    filterBtnActive: {
-        backgroundColor: '#334155',
-        borderColor: '#00B1FC',
-    },
-    filterText: {
-        fontSize: 13,
-        color: '#94A3B8',
-    },
-    filterTextActive: {
-        color: 'white',
-    },
-    noteItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#1E293B',
-        padding: 15,
-        borderRadius: 20,
-        borderWidth: 1,
-        borderColor: '#334155',
-    },
-    noteIconBox: {
-        width: 44,
-        height: 44,
-        backgroundColor: '#0F172A',
-        borderRadius: 12,
+    actionIconBox: {
+        width: 50,
+        height: 50,
+        borderRadius: 15,
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 12,
+        marginBottom: 8,
     },
-    noteMainInfo: {
+    actionLabel: {
+        fontSize: 11,
+        color: '#94A3B8',
+        textAlign: 'center',
+    },
+    filterBar: {
+        flexDirection: 'row',
+        paddingHorizontal: 20,
+        marginBottom: 20,
+        gap: 12,
+    },
+    filterChip: {
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+        backgroundColor: '#1E293B',
+        borderWidth: 1,
+        borderColor: '#334155',
+    },
+    filterChipActive: {
+        backgroundColor: '#00B1FC15',
+        borderColor: '#00B1FC',
+    },
+    filterChipText: {
+        fontSize: 13,
+        color: '#64748B',
+    },
+    filterChipTextActive: {
+        color: '#00B1FC',
+        fontWeight: 'bold',
+    },
+    notesList: {
+        paddingHorizontal: 20,
+        gap: 12,
+    },
+    noteCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#1E293B',
+        padding: 12,
+        borderRadius: 24,
+        borderWidth: 1,
+        borderColor: '#334155',
+    },
+    noteIconSection: {
+        marginRight: 15,
+    },
+    iconBlur: {
+        width: 48,
+        height: 48,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    noteContentSection: {
         flex: 1,
     },
     noteTitle: {
         fontSize: 15,
         color: 'white',
-        marginBottom: 4,
+        marginBottom: 6,
     },
-    noteMetaRow: {
+    noteBadges: {
         flexDirection: 'row',
+        gap: 8,
         alignItems: 'center',
     },
-    statusBadge: {
+    miniBadge: {
         paddingHorizontal: 8,
         paddingVertical: 2,
         borderRadius: 6,
+    },
+    miniBadgeText: {
+        fontSize: 10,
+        color: '#94A3B8',
+        fontWeight: 'bold',
+    },
+    statusTag: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 6,
+        gap: 5,
+    },
+    statusDot: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
     },
     statusText: {
         fontSize: 10,
         fontWeight: 'bold',
     },
-    dot: {
-        color: '#475569',
-        marginHorizontal: 8,
-    },
-    metaText: {
-        fontSize: 12,
-        color: '#64748B',
-    },
-    notePriceInfo: {
+    noteStatsSection: {
         alignItems: 'flex-end',
+        paddingRight: 5,
     },
     notePrice: {
         fontSize: 16,
         color: 'white',
-        marginBottom: 4,
+        marginBottom: 2,
     },
-    salesRow: {
+    miniSales: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 4,
     },
-    salesCount: {
-        fontSize: 11,
-        color: '#94A3B8',
-    },
-    fab: {
-        position: 'absolute',
-        bottom: 30,
-        right: 20,
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        backgroundColor: '#00B1FC',
-        justifyContent: 'center',
-        alignItems: 'center',
-        elevation: 5,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4,
+    miniSalesText: {
+        fontSize: 10,
+        color: '#64748B',
     },
     emptyState: {
         alignItems: 'center',
-        marginTop: 20,
+        paddingVertical: 40,
+        backgroundColor: '#1E293B',
+        borderRadius: 24,
+        borderStyle: 'dashed',
+        borderWidth: 1,
+        borderColor: '#334155',
     },
     emptyText: {
-        color: '#64748B',
+        color: '#475569',
+        marginTop: 10,
     }
 });
 

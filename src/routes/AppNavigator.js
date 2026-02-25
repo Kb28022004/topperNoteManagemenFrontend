@@ -15,7 +15,16 @@ import TopperHome from '../screens/topper/TopperHome';
 import TopperDashboard from '../screens/topper/TopperDashboard';
 import TopperProfile from '../screens/topper/TopperProfile';
 import NotePreview from '../screens/topper/NotePreview';
+import TopperNoteDetails from '../screens/topper/TopperNoteDetails';
 import UploadNotes from '../screens/topper/UploadNotes';
+import MyUploads from '../screens/topper/MyUploads';
+import MySoldNotes from '../screens/topper/MySoldNotes';
+import AllNoteBuyers from '../screens/topper/AllNoteBuyers';
+import AllNoteReviews from '../screens/topper/AllNoteReviews';
+import TopperReviews from '../screens/topper/TopperReviews';
+import EarningsPayouts from '../screens/topper/EarningsPayouts';
+import StudentProfileDetail from '../screens/topper/StudentProfileDetail';
+import Followers from '../screens/topper/Followers';
 import AdminProfileSetup from '../screens/admin/AdminProfileSetup';
 import AdminDashboard from '../screens/admin/AdminDashboard';
 import Store from '../screens/student/Store';
@@ -26,6 +35,7 @@ import TransactionHistory from '../screens/student/TransactionHistory';
 import TransactionDetails from '../screens/student/TransactionDetails';
 import AccountSettings from '../screens/student/AccountSettings';
 import EditAcademicProfile from '../screens/student/EditAcademicProfile';
+import AllToppers from '../screens/student/AllToppers';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useState, useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -159,6 +169,7 @@ export default function AppNavigator() {
         </Stack.Screen>
 
         <Stack.Screen name="NotePreview" component={NotePreview} />
+        <Stack.Screen name="TopperNoteDetails" component={TopperNoteDetails} />
         <Stack.Screen name="StudentNoteDetails" component={require('../screens/student/StudentNoteDetails').default} />
 
         <Stack.Screen name="UploadNotes">
@@ -219,6 +230,15 @@ export default function AppNavigator() {
         <Stack.Screen name="TransactionDetails" component={TransactionDetails} />
         <Stack.Screen name="AccountSettings" component={AccountSettings} />
         <Stack.Screen name="EditAcademicProfile" component={EditAcademicProfile} />
+        <Stack.Screen name="MyUploads" component={MyUploads} />
+        <Stack.Screen name="MySoldNotes" component={MySoldNotes} />
+        <Stack.Screen name="AllNoteBuyers" component={AllNoteBuyers} />
+        <Stack.Screen name="AllNoteReviews" component={AllNoteReviews} />
+        <Stack.Screen name="TopperReviews" component={TopperReviews} />
+        <Stack.Screen name="EarningsPayouts" component={EarningsPayouts} />
+        <Stack.Screen name="StudentProfileDetail" component={StudentProfileDetail} />
+        <Stack.Screen name="Followers" component={Followers} />
+        <Stack.Screen name="AllToppers" component={AllToppers} />
 
         <Stack.Screen name="AdminProfileSetup">
           {(props) => (

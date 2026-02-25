@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
     View,
     StyleSheet,
@@ -8,9 +8,10 @@ import {
     Dimensions,
     ActivityIndicator,
     RefreshControl,
+    StatusBar,
 } from 'react-native';
 
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { useGetAllToppersQuery } from '../../features/api/topperApi';
 import { useGetNotesQuery } from '../../features/api/noteApi';
 import { useGetProfileQuery } from '../../features/api/studentApi';
@@ -19,53 +20,62 @@ import useDebounceSearch from '../../hooks/useDebounceSearch';
 import useRefresh from '../../hooks/useRefresh';
 
 import AppText from '../../components/AppText';
-import Loader from '../../components/Loader';
 import NoteCard from '../../components/NoteCard';
 import SearchBar from '../../components/SearchBar';
 import CategoryFilters from '../../components/CategoryFilters';
 import NoDataFound from '../../components/NoDataFound';
 import SortModal from '../../components/SortModal';
+import ScreenLoader from '../../components/ScreenLoader';
 import { Theme } from '../../theme/Theme';
 import { capitalize } from '../../helpers/capitalize';
 
 const { width } = Dimensions.get('window');
 
-const Store = ({ navigation }) => {
-    const { searchQuery, localSearch, setLocalSearch } = useDebounceSearch();
-    const [activeCategory, setActiveCategory] = useState('All');
-    const [selectedTopper, setSelectedTopper] = useState(null);
+const Store = ({ navigation, route }) => {
+    const initialParams = route.params || {};
+    const { searchQuery, localSearch, setLocalSearch } = useDebounceSearch(initialParams.search || '');
+    const [activeCategory, setActiveCategory] = useState(initialParams.category || 'All');
+    const [selectedSubject, setSelectedSubject] = useState(initialParams.subject || null);
+    const [selectedTopper, setSelectedTopper] = useState(initialParams.topperId || null);
     const [page, setPage] = useState(1);
-    const [sortBy, setSortBy] = useState('newest');
-    const [timeRange, setTimeRange] = useState('all');
+    const [sortBy, setSortBy] = useState(initialParams.sortBy || 'newest');
+    const [timeRange, setTimeRange] = useState(initialParams.timeRange || 'all');
     const [isSortModalVisible, setIsSortModalVisible] = useState(false);
 
-    // Reset page to 1 on filter/search change
+    // Sync with navigation params when they change
+    React.useEffect(() => {
+        if (route.params) {
+            const { search, category, subject, sortBy: pSortBy, timeRange: pTimeRange, topperId } = route.params;
+            if (search !== undefined) setLocalSearch(search);
+            if (category !== undefined) setActiveCategory(category);
+            if (subject !== undefined) setSelectedSubject(subject);
+            if (pSortBy !== undefined) setSortBy(pSortBy);
+            if (pTimeRange !== undefined) setTimeRange(pTimeRange);
+            if (topperId !== undefined) setSelectedTopper(topperId);
+        }
+    }, [route.params]);
+
     React.useEffect(() => {
         setPage(1);
-    }, [activeCategory, searchQuery, selectedTopper, sortBy, timeRange]);
+    }, [activeCategory, searchQuery, selectedTopper, sortBy, timeRange, selectedSubject]);
 
-    // Profile
-    const { data: studentProfile, isLoading: isLoadingProfile, refetch: refetchProfile } =
-        useGetProfileQuery();
-
-    // Toppers
-    const { data: toppers, isLoading: isLoadingToppers, refetch: refetchToppers } =
-        useGetAllToppersQuery(undefined);
+    const { data: studentProfile, isLoading: isLoadingProfile, refetch: refetchProfile } = useGetProfileQuery();
+    const { data: toppers, isLoading: isLoadingToppers, refetch: refetchToppers } = useGetAllToppersQuery(undefined);
 
     const {
         data: notesResponse,
         isFetching,
         refetch: refetchNotes,
-    } = useGetNotesQuery(
-        {
-            subject: activeCategory === 'All' ? undefined : activeCategory,
-            search: searchQuery || undefined,
-            topperId: selectedTopper || undefined,
-            sortBy: sortBy,
-            timeRange: timeRange,
-            page: page
-        }
-    );
+    } = useGetNotesQuery({
+        class: activeCategory === 'Class 12' ? '12' : activeCategory === 'Class 10' ? '10' : undefined,
+        board: activeCategory === 'CBSE' ? 'CBSE' : undefined,
+        subject: selectedSubject || undefined,
+        search: searchQuery || undefined,
+        topperId: selectedTopper || undefined,
+        sortBy: sortBy,
+        timeRange: timeRange,
+        page: page
+    });
 
     const handleLoadMore = () => {
         const totalPages = notesResponse?.pagination?.totalPages || 0;
@@ -76,11 +86,11 @@ const Store = ({ navigation }) => {
 
     const handleRefresh = async () => {
         try {
-            await refetchProfile?.();
-            const promises = [];
-            promises.push(refetchToppers?.());
-            promises.push(refetchNotes?.());
-            if (promises.length > 0) await Promise.all(promises);
+            await Promise.all([
+                refetchProfile?.(),
+                refetchToppers?.(),
+                refetchNotes?.()
+            ]);
         } catch (error) {
             console.error("Refresh Error:", error);
         }
@@ -88,10 +98,11 @@ const Store = ({ navigation }) => {
 
     const { refreshing, onRefresh } = useRefresh(handleRefresh);
 
-    const categories = [
-        'All',
-        ...(studentProfile?.subjects?.map((s) => capitalize(s)) || []),
-    ];
+    const categories = ['All', 'Class 12', 'Class 10', 'CBSE'];
+
+    const subjects = useMemo(() => {
+        return studentProfile?.subjects?.map((s) => capitalize(s)) || [];
+    }, [studentProfile]);
 
     const renderTopper = ({ item }) => {
         const isSelected = selectedTopper === (item.userId || item.topperId);
@@ -103,20 +114,16 @@ const Store = ({ navigation }) => {
             >
                 <View style={[styles.avatarContainer, isSelected && styles.selectedAvatarContainer]}>
                     <Image
-                        source={
-                            item.profilePhoto
-                                ? { uri: item.profilePhoto }
-                                : require('../../../assets/topper.avif')
-                        }
+                        source={item.profilePhoto ? { uri: item.profilePhoto } : require('../../../assets/topper.avif')}
                         style={styles.avatar}
                     />
                     {isSelected && (
                         <View style={styles.checkBadge}>
-                            <Ionicons name="checkmark-circle" size={18} color="#00B1FC" />
+                            <Ionicons name="checkmark-circle" size={16} color="#00B1FC" />
                         </View>
                     )}
                 </View>
-                <AppText style={[styles.topperName, isSelected && styles.selectedTopperName]} numberOfLines={1}>
+                <AppText style={[styles.topperNameText, isSelected && styles.selectedTopperNameText]} numberOfLines={1}>
                     {item?.name?.split(' ')[0]}
                 </AppText>
             </TouchableOpacity>
@@ -124,111 +131,107 @@ const Store = ({ navigation }) => {
     };
 
     const HeaderComponent = useMemo(() => (
-        <View>
-            {/* Header */}
-            <View style={styles.header}>
+        <View style={styles.headerContent}>
+            <View style={styles.storeHeader}>
                 <View>
-                    <AppText style={styles.headerSubtitle}>Store</AppText>
-                    <AppText style={styles.headerTitle} weight="bold">
-                        Browse Notes
-                    </AppText>
+                    <View style={styles.liveTag}>
+                        <View style={styles.liveCircle} />
+                        <AppText style={styles.liveText}>MARKETPLACE</AppText>
+                    </View>
+                    <AppText style={styles.headerTitle} weight="bold">Academic Store</AppText>
                 </View>
+                <TouchableOpacity style={styles.cartIconBtn}>
+                    <Feather name="shopping-bag" size={20} color="white" />
+                </TouchableOpacity>
             </View>
 
-            {/* Search */}
-            <SearchBar
-                value={localSearch}
-                onChangeText={setLocalSearch}
-                placeholder="Search by subject, topper, or class"
-                onFilterPress={() => setIsSortModalVisible(true)}
-                isFilterActive={sortBy !== 'newest' || timeRange !== 'all'}
-                style={{ paddingHorizontal: 20 }}
-            />
+            <View style={styles.searchBox}>
+                <SearchBar
+                    value={localSearch}
+                    onChangeText={setLocalSearch}
+                    placeholder="Find subjects, topics or toppers..."
+                    onFilterPress={() => setIsSortModalVisible(true)}
+                    isFilterActive={sortBy !== 'newest' || timeRange !== 'all'}
+                />
+            </View>
 
-            {/* Categories */}
             <CategoryFilters
                 categories={categories}
                 activeCategory={activeCategory}
                 onSelectCategory={setActiveCategory}
-                style={{ paddingHorizontal: 20, marginBottom: 10 }}
+                style={styles.categoryFilters}
             />
 
-            {/* Toppers Section */}
-            <View style={styles.sectionHeader}>
-                <AppText style={styles.sectionTitle} weight="bold">
-                    FILTER BY TOPPERS
-                </AppText>
-            </View>
+            <View style={styles.topperFilterSection}>
+                <View style={styles.sectionHeadingRow}>
+                    <AppText style={styles.sectionTitle} weight="bold">FILTER BY TOPPERS</AppText>
+                    {selectedTopper && (
+                        <TouchableOpacity onPress={() => setSelectedTopper(null)}>
+                            <AppText style={styles.clearText}>Clear</AppText>
+                        </TouchableOpacity>
+                    )}
+                </View>
 
-            <View style={{ marginBottom: 20 }}>
                 {isLoadingToppers ? (
-                    <ActivityIndicator size="small" color="#00B1FC" />
-                ) : toppers?.data?.length > 0 ? (
+                    <ActivityIndicator size="small" color="#00B1FC" style={{ marginVertical: 10 }} />
+                ) : (
                     <FlatList
                         horizontal
                         data={toppers?.data || []}
                         keyExtractor={(item) => item.id || item.userId}
                         renderItem={renderTopper}
                         showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={styles.toppersList}
-                    />
-                ) : (
-                    <NoDataFound
-                        message="No toppers found at the moment."
-                        containerStyle={{ marginHorizontal: Theme.layout.screenPadding, paddingVertical: 20 }}
+                        contentContainerStyle={styles.toppersFlatList}
                     />
                 )}
             </View>
 
-            {/* Notes Section Header */}
-            <View style={styles.notesSectionHeader}>
-                <AppText style={styles.notesSectionTitle} weight="bold">
-                    All Available Notes
-                </AppText>
+            <View style={styles.resultsHeader}>
+                <AppText style={styles.resultsTitle} weight="bold">Available Materials</AppText>
+                <AppText style={styles.totalCount}>{notesResponse?.pagination?.totalNotes || 0} items</AppText>
             </View>
         </View>
-    ), [localSearch, activeCategory, selectedTopper, toppers, isLoadingToppers, sortBy, timeRange, navigation, categories]);
+    ), [localSearch, activeCategory, selectedTopper, toppers, isLoadingToppers, sortBy, timeRange, categories, notesResponse]);
 
-    if (isLoadingProfile) return <Loader visible />;
+    if (isLoadingProfile) return <ScreenLoader />;
+
+    const renderItem = useCallback(({ item }) => (
+        <NoteCard
+            note={item}
+            onPress={() => navigation.navigate('StudentNoteDetails', { noteId: item._id || item.id })}
+        />
+    ), [navigation]);
 
     return (
         <View style={styles.container}>
-            {/* Notes Grid with All contents in Header */}
+            <StatusBar barStyle="light-content" />
             <FlatList
                 ListHeaderComponent={HeaderComponent}
-                data={notesResponse?.notes || []}
+                data={(isFetching && page === 1 && !refreshing) ? [] : (notesResponse?.notes || [])}
                 keyExtractor={(item) => item._id || item.id}
-                renderItem={({ item }) => (
-                    <NoteCard
-                        note={item}
-                        onPress={() =>
-                            navigation.navigate('StudentNoteDetails', {
-                                noteId: item._id || item.id,
-                            })
-                        }
-                    />
-                )}
+                renderItem={renderItem}
                 numColumns={2}
-                columnWrapperStyle={styles.columnWrapper}
-                contentContainerStyle={{ paddingBottom: 120 }}
-                ListEmptyComponent={
-                    isFetching ? (
-                        <View style={{ marginTop: 60, alignItems: 'center' }}>
-                            <ActivityIndicator size="large" color="#00B1FC" />
-                            <AppText style={{ color: '#94A3B8', marginTop: 15 }}>Searching for notes...</AppText>
-                        </View>
-                    ) : (
-                        <NoDataFound
-                            message="No notes found in this category."
-                            containerStyle={{ marginTop: 40, marginHorizontal: 20 }}
-                        />
-                    )
-                }
+                columnWrapperStyle={styles.gridRow}
+                contentContainerStyle={styles.scrollList}
                 refreshControl={
                     <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00B1FC" />
                 }
                 onEndReached={handleLoadMore}
                 onEndReachedThreshold={0.5}
+                removeClippedSubviews={true}
+                maxToRenderPerBatch={6}
+                windowSize={5}
+                initialNumToRender={6}
+                ListFooterComponent={
+                    isFetching ? (
+                        <ActivityIndicator size="large" color="#00B1FC" style={{ marginVertical: 40 }} />
+                    ) : (notesResponse?.notes?.length === 0) ? (
+                        <NoDataFound
+                            message="We couldn't find any notes matching your search."
+                            containerStyle={{ marginTop: 40 }}
+                        />
+                    ) : <View style={{ height: 100 }} />
+                }
             />
 
             <SortModal
@@ -238,6 +241,9 @@ const Store = ({ navigation }) => {
                 onSelectSort={setSortBy}
                 selectedTime={timeRange}
                 onSelectTime={setTimeRange}
+                selectedSubject={selectedSubject}
+                onSelectSubject={setSelectedSubject}
+                subjects={subjects}
             />
         </View>
     );
@@ -247,38 +253,94 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#0F172A',
-        paddingTop: 50,
     },
-    header: {
+    headerContent: {
+        paddingTop: 60,
+    },
+    storeHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 20,
         marginBottom: 20,
     },
-    headerSubtitle: {
-        fontSize: 14,
-        color: '#94A3B8',
-        letterSpacing: 1,
-        textTransform: 'uppercase',
+    liveTag: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#3B82F615',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 6,
+        alignSelf: 'flex-start',
+        marginBottom: 6,
+    },
+    liveCircle: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: '#00B1FC',
+        marginRight: 6,
+    },
+    liveText: {
+        fontSize: 10,
+        color: '#00B1FC',
+        fontWeight: 'bold',
     },
     headerTitle: {
         fontSize: 28,
         color: 'white',
-        marginTop: 4,
     },
-    toppersList: {
+    cartIconBtn: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: '#1E293B',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#334155',
+    },
+    searchBox: {
         paddingHorizontal: 20,
-        gap: 15,
+        marginBottom: 20,
+    },
+    categoryFilters: {
+        paddingLeft: 20,
+        marginBottom: 25,
+    },
+    topperFilterSection: {
+        marginBottom: 30,
+    },
+    sectionHeadingRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        marginBottom: 15,
+    },
+    sectionTitle: {
+        fontSize: 12,
+        color: '#475569',
+        letterSpacing: 1.5,
+    },
+    clearText: {
+        fontSize: 12,
+        color: '#00B1FC',
+        fontWeight: 'bold',
+    },
+    toppersFlatList: {
+        paddingLeft: 20,
+        paddingRight: 10,
     },
     topperItem: {
         alignItems: 'center',
-        width: 70,
+        marginRight: 20,
+        width: 65,
     },
     avatarContainer: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
+        width: 54,
+        height: 54,
+        borderRadius: 27,
         borderWidth: 2,
         borderColor: '#1E293B',
         padding: 2,
@@ -291,7 +353,7 @@ const styles = StyleSheet.create({
     avatar: {
         width: '100%',
         height: '100%',
-        borderRadius: 30,
+        borderRadius: 25,
     },
     checkBadge: {
         position: 'absolute',
@@ -300,41 +362,36 @@ const styles = StyleSheet.create({
         backgroundColor: '#0F172A',
         borderRadius: 10,
     },
-    topperName: {
-        fontSize: 12,
-        color: '#94A3B8',
-        textAlign: 'center',
+    topperNameText: {
+        fontSize: 11,
+        color: '#64748B',
     },
-    selectedTopperName: {
+    selectedTopperNameText: {
         color: 'white',
         fontWeight: 'bold',
     },
-    sectionHeader: {
-        paddingHorizontal: 20,
-        marginBottom: 15,
-    },
-    sectionTitle: {
-        fontSize: 14,
-        color: '#64748B',
-        letterSpacing: 1,
-        marginTop:20
-    },
-    notesSectionHeader: {
+    resultsHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingHorizontal: Theme.layout.screenPadding,
-        marginVertical: 15,
+        paddingHorizontal: 20,
+        marginBottom: 20,
     },
-    notesSectionTitle: {
-        color: '#f9f9f9ff',
+    resultsTitle: {
         fontSize: 18,
-        letterSpacing: 1,
+        color: 'white',
     },
-    columnWrapper: {
+    totalCount: {
+        fontSize: 12,
+        color: '#64748B',
+    },
+    gridRow: {
         justifyContent: 'space-between',
-        paddingHorizontal: Theme.layout.screenPadding,
+        paddingHorizontal: 20,
     },
+    scrollList: {
+        paddingBottom: 40,
+    }
 });
 
 export default Store;
